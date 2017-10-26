@@ -8,12 +8,13 @@ $.addEvents = function (obj, node) {
 $.load = function (id, node) { (node || document.body).appendChild(document.importNode($("#" + id)[0].content, true)) };
 
 // Game logic
-var letters, list, found = [], score = 0, duration = 180;
+var letters, list, found = [], left, score = 0, duration = 180;
 $.addEvents({
   "": {
     load: function () {
       $("#board").forEach(() => {
         ({letters, list} = JSON.parse(sessionStorage.game));
+        left = list.slice();
         let board = $("#board")[0], i;
         for (i = 0; i < 9; i++) $.load("cell", board);
         $("#numwords")[0].innerText = "Total words: " + list.length;
@@ -60,7 +61,14 @@ $.addEvents({
           interact.classList.remove("active");
           interact.classList.add("completed");
           $("#score")[0].innerText = "Score: " + score;
-          $("#numwords")[0].innerText = "Words: " + found.length + " / " + list.length
+          $("#numwords")[0].innerText = "Words: " + found.length + " / " + list.length;
+          let words = $("#words")[0];
+          $.load("divider", words);
+          left.forEach(wd => {
+            $.load("word", words);
+            $(".word", words.lastChild)[0].innerText = wd;
+            $(".score", words.lastChild)[0].innerText = [0, 0, 0, 1, 1, 2, 3, 5, 8, 11][wd.length];
+          })
         }
         $("#timer")[0].innerText = new Date((duration - seconds) * 1000).toUTCString().match(/\d\d:\d(\d:\d\d)/)[1]
       }, 1000);
@@ -76,6 +84,7 @@ $.addEvents({
           if (found.indexOf(wd) == -1) {
             var words = $("#words")[0], wscore = [0, 0, 0, 1, 1, 2, 3, 5, 8, 11][wd.length];
             found.push(wd);
+            left.splice(left.indexOf(wd), 1);
             score += wscore;
             $.load("word", words);
             $(".word", words.lastChild)[0].innerText = wd;
