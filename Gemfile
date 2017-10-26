@@ -5,3 +5,5 @@ ruby "2.4.1"
 gem 'roda', '~> 3.1'
 gem 'puma', '~> 3.10'
 gem 'tilt', '~> 2.0', '>= 2.0.8'
+gem 'sequel', '~> 5.1'
+gem 'sqlite3', '~> 1.3', '>= 1.3.13'

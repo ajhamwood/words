@@ -8,8 +8,7 @@ $.addEvents = function (obj, node) {
 $.load = function (id, node) { (node || document.body).appendChild(document.importNode($("#" + id)[0].content, true)) };
 
 // Game logic
-
-var letters, list, found = [], score = 0, duration = 120;
+var letters, list, found = [], score = 0, duration = 180;
 $.addEvents({
   "": {
     load: function () {
@@ -27,10 +26,27 @@ $.addEvents({
     click: function () {
       if (this.classList.contains("loading")) return false;
       this.classList.add("loading");
-      fetch("/game")
-        .then(res => res.text())
-        .then(str => sessionStorage.game = str)
-        .then(() => window.location = "play")
+      var opts;
+      if ("uuid" in localStorage) {
+        let data = new FormData();
+        data.append("uuid", localStorage.uuid);
+        opts = {method: "POST", body: data}
+      }
+      fetch("/game", opts)
+        .then(res => res.json())
+        .then(obj => {
+          if ("uuid" in obj) {
+            localStorage.uuid = obj.uuid;
+            delete obj.uuid
+          }
+          if (Object.keys(obj).length) {
+            sessionStorage.game = JSON.stringify(obj);
+            window.location = "play"
+          } else setTimeout(() => {
+            this.classList.remove("loading");
+            this.dispatchEvent(new Event("click"))
+          }, 3000)
+        })
     }
   },
   "#start": {

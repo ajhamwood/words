@@ -2,9 +2,8 @@
 require 'json'
 
 module Words
-  class Game
+  class GameGenerator
     def initialize
-      @out = nil
       # https://en.oxforddictionaries.com/explore/which-letters-are-used-most
       letter_weights = { 'E' => 5688, 'A' => 4331, 'R' => 3864, 'I' => 3845, 'O' => 3651, 'T' => 3543,
         'N' => 3392, 'S' => 2923, 'L' => 2798, 'C' => 2313, 'U' => 1851, 'D' => 1725,
@@ -23,7 +22,7 @@ module Words
 
       list = []
       Thread.new do
-        File.foreach("data/sowpods.txt") do |word|
+        File.foreach('data/sowpods.txt') do |word|
           if word.length < 5 then next end
           word.chomp!
           w = word.split('')
@@ -37,14 +36,10 @@ module Words
             end
           end
         end
-        @out << JSON.generate({'letters' => letters, 'list' => list})
-        @out.close()
+        DB[:games].insert letters: JSON.generate(letters), words: JSON.generate(list), fresh: true
+        App::keepfresh
       end
 
-    end
-
-    def stream sink
-      @out = sink
     end
   end
 end
