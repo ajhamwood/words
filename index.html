@@ -1,0 +1,288 @@
+<!doctype html>
+<html>
+<head>
+  <title>Words</title>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="keywords" content="words, word game">
+  <meta name="description" content="Look for words that use the given letters.">
+  <link rel="shortcut icon" href="data:image/png;base64,">
+  <style>
+html, body {
+  margin: 0;
+  text-align: center;
+  overflow: hidden;
+  height: 100% }
+.button {
+  display: inline-block;
+  font-size: xx-large;
+  margin: 1em 0 .5em;
+  border: 1px solid black;
+  padding: .3em .8em;
+  border-radius: .2em;
+  cursor: pointer }
+
+#spinner {
+  display: inline-block;
+  height: .8em;
+  width: .8em;
+  margin: 0 0 -.15em .7em;
+  border-radius: .8em;
+  box-shadow: inset 0 0 0 .15em #fff;
+  border: 2px solid;
+  border-color: #090 #cc0 #cc0 #090;
+  background: linear-gradient(-45deg, #090, #090 50%, #cc0 50%, #cc0);
+  animation: spinner 1s infinite linear }
+@keyframes spinner {
+  0% { transform: rotateZ(0deg) }
+  100% { transform: rotateZ(360deg) } }
+:not(.loading) > #spinner {
+  display: none }
+
+.play > .generate {
+  display: none }
+#content {
+  display: none;
+  flex-flow: row wrap;
+  height: 100% }
+.play > #content {
+  display: flex }
+#content > * {
+  flex: 1 }
+#board {
+  display: grid;
+  width: calc(6em + 20px);
+  margin: 0 auto;
+  padding: 2em;
+  grid-template-columns: repeat(3, 1fr);
+  grid-gap: 10px;
+  font-size: xx-large }
+#board > * {
+  background: #ccc;
+  border-radius: .5em;
+  width: 2em;
+  height: 2em;
+  line-height: 2em }
+.active > #start, .completed > #start,
+:not(.active) > input,
+:not(.active) > #invalid,
+:not(.completed) > #score,
+.active > #numwords,
+:not(.completed) + #list > .generate {
+  display: none }
+#score {
+  font-size: xx-large }
+#list {
+  height: 100% }
+#words {
+  text-align: left;
+  padding-right: 0;
+  height: calc(100% - 9em);
+  overflow-x: auto;
+  overflow-y: hidden;
+  margin: 1em;
+  display: flex;
+  flex-flow: column wrap;
+  align-content: flex-start }
+#words > * {
+  margin-right: 1em }
+.word {
+  margin-right: .8em }
+.divider {
+  height: 1em }
+.divider ~ * {
+  color: #070;
+  font-weight: bold }
+#words > :last-child {
+  margin-right: 8em }
+#list > .generate {
+  position: fixed;
+  bottom: .5em;
+  right: 1em }
+#timer {
+  background: #fff;
+  border: 1px solid #ddd;
+  position: absolute;
+  top: 5px;
+  right: 5px;
+  padding: .5rem }
+  </style>
+</head>
+<body>
+  <div class="button generate">New Game<div id="spinner"></div></div>
+  <div id="content">
+    <div id="interact">
+      <div id="board"></div>
+      <div id="start" class="button">START</div>
+      <input type="text" />
+      <div id="invalid"></div>
+      <div id="score"></div>
+      <div id="numwords"></div>
+    </div>
+    <div id="list">
+      <div id="timer"></div>
+      <div id="words"></div>
+      <div class="button generate">New Game<div id="spinner"></div></div>
+    </div>
+  </div>
+  <template id="cell"
+    ><div></div
+  ></template>
+  <template id="word"
+    ><div
+      ><span class="word"></span
+      ><span class="score"></span
+    ></div
+  ></template>
+  <template id="divider"
+    ><div class="divider"></div
+  ></template>
+  <script>
+// Utils
+function $ (sel, node) { return Array.prototype.slice.call( (node || document).querySelectorAll(sel) ) }
+$.addEvents = function (obj, node) {
+  for (var q in obj) for (var e in obj[q])
+    for (var ns = q ? $(q, node) : [window, document], es = e.split(' '), i = 0; i < es.length; i++)
+      typeof ns === 'undefined' || ns.forEach(n => n.addEventListener(es[i], obj[q][e].bind(n)))
+};
+$.load = function (id, node) { (node || document.body).appendChild(document.importNode($("#" + id)[0].content, true)) };
+
+// Game logic
+var letters, list, found = [], left, score = 0, duration = 180, worker;
+$.addEvents({
+  "": {
+    load: function () {
+      var blob = new Blob([`
+        var sowpods, list, letters, flag = 0;
+        fetch(new RegExp("^blob:(.*?)[^/]*$").exec(self.location)[1] + "words/sowpods.txt")
+          .then(res => res.text()).then(string => {
+            sowpods = string.split(new RegExp("\\r\\n|\\n"))
+          }).then(getWords);
+
+        function getWords() {
+          `+/* https://en.oxforddictionaries.com/explore/which-letters-are-used-most */`
+          var letter_weights = { 'E': 5688, 'A': 4331, 'R': 3864, 'I': 3845, 'O': 3651, 'T': 3543,
+            'N': 3392, 'S': 2923, 'L': 2798, 'C': 2313, 'U': 1851, 'D': 1725,
+            'P': 1614, 'M': 1536, 'H': 1531, 'G': 1259, 'B': 1056, 'F': 924,
+            'Y': 906, 'W': 657, 'K': 561, 'V': 513, 'X': 148, 'Z': 139, 'J': 100, 'Q': 100 };
+
+          var cuml_letters = "ABCDEFGHIJKLMNOPQRSTUVWXYZ".split('').reduce((acc, nxt) => {
+            acc.push(acc[0] += letter_weights[nxt]);
+            return acc
+          }, [0]).slice(1, 27);
+
+          letters = new Array(9).fill(0).map(() => {
+            let r = cuml_letters[25] * Math.random();
+            return "ABCDEFGHIJKLMNOPQRSTUVWXYZ".substr(cuml_letters.findIndex(x => x >= r), 1)
+          });
+
+          list = sowpods.filter(word => {
+            if (word.length < 3) return false;
+            let w = word.split(''), i = 0, j;
+            for (; i < letters.length; i++) {
+              if ((j = w.indexOf(letters[i])) != -1) {
+                w.splice(j, 1);
+                if (!w.length) break
+              }
+            }
+            return !w.length
+          });
+
+          if (flag & 1) {
+            postMessage({letters, list});
+            flag = 0;
+            getWords();
+          } else flag |= 2
+        }
+
+        self.onmessage = () => {
+          if (flag & 2) {
+            postMessage({letters, list});
+            flag = 0;
+            getWords();
+          } else flag |= 1
+        }
+      `], {type: 'application/javascript'});
+      worker = new Worker(URL.createObjectURL(blob));
+      worker.onmessage = function(event) {
+        var data = event.data;
+        if (typeof data == 'string') return console.log(data)
+        if (Object.keys(data).length) {
+          ({letters, list} = data);
+          left = list.slice();
+          score = 0;
+          found = [];
+          interact.classList.remove("completed");
+          $(".generate")[1].classList.remove("loading");
+          $("body")[0].classList.add("play");
+          $("#board > *").forEach(x => x.innerText = null);
+          $("#words > *").forEach(x => x.remove());
+          $("#numwords")[0].innerText = "Total words: " + list.length;
+          $("#timer")[0].innerText = new Date(duration * 1000).toUTCString().match(/\d\d:\d(\d:\d\d)/)[1]
+        }
+      }
+      for (var board = $("#board")[0], i = 0; i < 9; i++) $.load("cell", board);
+    }
+  },
+  ".generate": {
+    click: function () {
+      if (this.classList.contains("loading")) return false;
+      this.classList.add("loading");
+      worker.postMessage("")
+    }
+  },
+  "#start": {
+    click: function () {
+      var interact = $("#interact")[0], cells = $("#board > *"), i;
+      for (i = 0; i < 9; i++) cells[i].innerText = letters[i];
+      interact.classList.add("active");
+      var seconds = 0, ix = setInterval(() => {
+        if (++seconds >= duration) {
+          clearInterval(ix);
+          interact.classList.remove("active");
+          interact.classList.add("completed");
+          $("#score")[0].innerText = "Score: " + score;
+          $("#numwords")[0].innerText = "Words: " + found.length + " / " + list.length;
+          let words = $("#words")[0];
+          $.load("divider", words);
+          left.forEach(wd => {
+            $.load("word", words);
+            $(".word", words.lastChild)[0].innerText = wd;
+            $(".score", words.lastChild)[0].innerText = [0, 0, 0, 1, 1, 2, 3, 5, 8, 11][wd.length];
+          })
+        }
+        $("#timer")[0].innerText = new Date((duration - seconds) * 1000).toUTCString().match(/\d\d:\d(\d:\d\d)/)[1]
+      }, 1000);
+      $("input")[0].focus()
+    }
+  },
+  "input": {
+    keypress: function (e) {
+      var ix, wd = this.value.toUpperCase();
+      if (e.key == "Enter") {
+        var invalid = $("#invalid")[0];
+        if ((ix = list.indexOf(wd)) != -1) {
+          if (found.indexOf(wd) == -1) {
+            var words = $("#words")[0], wscore = [0, 0, 0, 1, 1, 2, 3, 5, 8, 11][wd.length];
+            found.push(wd);
+            left.splice(left.indexOf(wd), 1);
+            score += wscore;
+            $.load("word", words);
+            $(".word", words.lastChild)[0].innerText = wd;
+            $(".score", words.lastChild)[0].innerText = wscore;
+            invalid.innerText = "";
+            words.scrollLeft = words.scrollWidth - words.offsetWidth
+          } else {
+            invalid.innerText = "Already found"
+          }
+        } else {
+          invalid.innerText = "Not accepted"
+        }
+        this.value = ""
+      }
+    }
+  }
+})
+  </script>
+</body>
+</html>
