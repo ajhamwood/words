@@ -23,7 +23,7 @@ module Words
       list = []
       Thread.new do
         File.foreach('data/sowpods.txt') do |word|
-          if word.length < 5 then next end
+          next if word.length > 11 || word.length < 5
           word.chomp!
           w = word.split('')
           letters.each do |e|

@@ -3,28 +3,33 @@ function $ (sel, node) { return Array.prototype.slice.call( (node || document).q
 $.addEvents = function (obj, node) {
   for (var q in obj) for (var e in obj[q])
     for (var ns = q ? $(q, node) : [window, document], es = e.split(' '), i = 0; i < es.length; i++)
-      typeof ns === 'undefined' || ns.forEach(n => n.addEventListener(es[i], obj[q][e].bind(n)))
-};
+      typeof ns === 'undefined' || ns.forEach(n => n.addEventListener(es[i], obj[q][e].bind(n))) };
 $.load = function (id, node) { (node || document.body).appendChild(document.importNode($("#" + id)[0].content, true)) };
 
 // Game logic
 var letters, list, found = [], left, score = 0, duration = 180;
+function time (t) { return Math.floor(t / 60) + ":" + ("0" + t % 60).slice(-2) }
 $.addEvents({
   "": {
     load: function () {
       $("#board").forEach(() => {
+
+        // Page state: before game
         ({letters, list} = JSON.parse(sessionStorage.game));
         left = list.slice();
         let board = $("#board")[0], i;
         for (i = 0; i < 9; i++) $.load("cell", board);
         $("#numwords")[0].innerText = "Total words: " + list.length;
-        $("#timer")[0].innerText = new Date(duration * 1000).toUTCString().match(/\d\d:\d(\d:\d\d)/)[1]
+        $("#timer")[0].innerText = time(duration)
+
       })
     },
     unload: function () { $("#generate").forEach(g => g.classList.remove("loading")) }
   },
   "#generate": {
     click: function () {
+
+      // Page state: retrieve game
       if (this.classList.contains("loading")) return false;
       this.classList.add("loading");
       var opts;
@@ -48,15 +53,20 @@ $.addEvents({
             this.dispatchEvent(new Event("click"))
           }, 3000)
         })
+
     }
   },
   "#start": {
     click: function () {
+
+      // Page state: begin game
       var interact = $("#interact")[0], cells = $("#board > *"), i;
       for (i = 0; i < 9; i++) cells[i].innerText = letters[i];
       interact.classList.add("active");
       var seconds = 0, ix = setInterval(() => {
-        if (++seconds == duration) {
+        if (++seconds >= duration) {
+
+          // Page state: complete game
           clearInterval(ix);
           interact.classList.remove("active");
           interact.classList.add("completed");
@@ -69,33 +79,33 @@ $.addEvents({
             $(".word", words.lastChild)[0].innerText = wd;
             $(".score", words.lastChild)[0].innerText = [0, 0, 0, 1, 1, 2, 3, 5, 8, 11][wd.length];
           })
+
         }
-        $("#timer")[0].innerText = new Date((duration - seconds) * 1000).toUTCString().match(/\d\d:\d(\d:\d\d)/)[1]
+        $("#timer")[0].innerText = time(duration - seconds)
       }, 1000);
       $("input")[0].focus()
+
     }
   },
   "input": {
     keypress: function (e) {
-      var ix, wd = this.value.toUpperCase();
+      var wd = this.value.toUpperCase();
       if (e.key == "Enter") {
         var invalid = $("#invalid")[0];
-        if ((ix = list.indexOf(wd)) != -1) {
-          if (found.indexOf(wd) == -1) {
-            var words = $("#words")[0], wscore = [0, 0, 0, 1, 1, 2, 3, 5, 8, 11][wd.length];
-            found.push(wd);
-            left.splice(left.indexOf(wd), 1);
-            score += wscore;
-            $.load("word", words);
-            $(".word", words.lastChild)[0].innerText = wd;
-            $(".score", words.lastChild)[0].innerText = wscore;
-            invalid.innerText = "";
-            words.scrollLeft = words.scrollWidth - words.offsetWidth
-          } else {
-            invalid.innerText = "Already found"
-          }
-        } else {
-          invalid.innerText = "Not accepted"
+        if (list.indexOf(wd) == -1) invalid.innerText = "Not accepted";
+        else if (found.indexOf(wd) > -1) invalid.innerText = "Already found";
+        else {
+
+          // Page state: found word
+          var words = $("#words")[0], wscore = [0, 0, 0, 1, 1, 2, 3, 5, 8, 11][wd.length];
+          found = found.concat(left.splice(left.indexOf(wd), 1));
+          score += wscore;
+          $.load("word", words);
+          $(".word", words.lastChild)[0].innerText = wd;
+          $(".score", words.lastChild)[0].innerText = wscore;
+          invalid.innerText = "";
+          words.scrollLeft = words.scrollWidth - words.offsetWidth
+
         }
         this.value = ""
       }

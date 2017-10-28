@@ -11,6 +11,12 @@ html, body {
   padding: .3em .8em;
   border-radius: .2em;
   cursor: pointer }
+#description {
+  margin: 4rem 20%;
+  background: #dfd;
+  padding: 1.5rem;
+  border-radius: 2rem;
+  font: 10pt/2rem mono }
 
 #spinner {
   display: inline-block;
@@ -65,7 +71,6 @@ html, body {
   padding-right: 0;
   height: calc(100% - 9em);
   overflow-x: auto;
-  overflow-y: hidden;
   margin: 1em;
   display: flex;
   flex-flow: column wrap;
