@@ -2,11 +2,11 @@
 <html>
 <head>
   <title>Words</title>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="keywords" content="words, word game">
-  <meta name="description" content="Look for words that use the given letters.">
-  <link rel="shortcut icon" href="data:image/png;base64,">
+  <meta charset='UTF-8'>
+  <meta name='viewport' content='width=device-width, initial-scale=1'>
+  <meta name='keywords' content='words, word game'>
+  <meta name='description' content='Look for words that use the given letters.'>
+  <link rel='shortcut icon' href='data:image/png;base64,'>
   <style>
 html, body {
   margin: 0;
@@ -21,6 +21,12 @@ html, body {
   padding: .3em .8em;
   border-radius: .2em;
   cursor: pointer }
+#description {
+  margin: 4rem 20%;
+  background: #dfd;
+  padding: 1.5rem;
+  border-radius: 2rem;
+  font: 10pt/2rem mono }
 
 #spinner {
   display: inline-block;
@@ -39,7 +45,7 @@ html, body {
 :not(.loading) > #spinner {
   display: none }
 
-.play > .generate {
+.play > #initial {
   display: none }
 #content {
   display: none;
@@ -79,7 +85,6 @@ html, body {
   padding-right: 0;
   height: calc(100% - 9em);
   overflow-x: auto;
-  overflow-y: hidden;
   margin: 1em;
   display: flex;
   flex-flow: column wrap;
@@ -109,33 +114,36 @@ html, body {
   </style>
 </head>
 <body>
-  <div class="button generate">New Game<div id="spinner"></div></div>
-  <div id="content">
-    <div id="interact">
-      <div id="board"></div>
-      <div id="start" class="button">START</div>
-      <input type="text" />
-      <div id="invalid"></div>
-      <div id="score"></div>
-      <div id="numwords"></div>
+  <div id="initial">
+    <div class='button generate'>New Game<div id='spinner'></div></div>
+    <div id="description">In this game, you will be given 9 letters. You have 3 minutes to find as many words as you can using only these letters. Words must be at least 3 letters long. If you are given more than one copy of a letter, acceptable words cannot contain more than the number of copies of that letter. The complete word list is the <a href='https://en.wikipedia.org/wiki/Collins_Scrabble_Words'>SOWPODS corpus</a>.</div>
+  </div>
+  <div id='content'>
+    <div id='interact'>
+      <div id='board'></div>
+      <div id='start' class='button'>START</div>
+      <input type='text' />
+      <div id='invalid'></div>
+      <div id='score'></div>
+      <div id='numwords'></div>
     </div>
-    <div id="list">
-      <div id="timer"></div>
-      <div id="words"></div>
-      <div class="button generate">New Game<div id="spinner"></div></div>
+    <div id='list'>
+      <div id='timer'></div>
+      <div id='words'></div>
+      <div class='button generate'>New Game<div id='spinner'></div></div>
     </div>
   </div>
-  <template id="cell"
+  <template id='cell'
     ><div></div
   ></template>
-  <template id="word"
+  <template id='word'
     ><div
-      ><span class="word"></span
-      ><span class="score"></span
+      ><span class='word'></span
+      ><span class='score'></span
     ></div
   ></template>
-  <template id="divider"
-    ><div class="divider"></div
+  <template id='divider'
+    ><div class='divider'></div
   ></template>
   <script>
 // Utils
@@ -143,43 +151,37 @@ function $ (sel, node) { return Array.prototype.slice.call( (node || document).q
 $.addEvents = function (obj, node) {
   for (var q in obj) for (var e in obj[q])
     for (var ns = q ? $(q, node) : [window, document], es = e.split(' '), i = 0; i < es.length; i++)
-      typeof ns === 'undefined' || ns.forEach(n => n.addEventListener(es[i], obj[q][e].bind(n)))
-};
-$.load = function (id, node) { (node || document.body).appendChild(document.importNode($("#" + id)[0].content, true)) };
+      typeof ns === 'undefined' || ns.forEach(n => n.addEventListener(es[i], obj[q][e].bind(n))) };
+$.load = function (id, node) { (node || document.body).appendChild(document.importNode($('#' + id)[0].content, true)) };
 
-// Game logic
+// Game event logic
 var letters, list, found = [], left, score = 0, duration = 180, worker;
+function time (t) { return Math.floor(t / 60) + ":" + ("0" + t % 60).slice(-2) }
 $.addEvents({
-  "": {
+  '': {
     load: function () {
+      // Game generator webworker
       var blob = new Blob([`
-        var sowpods, list, letters, flag = 0;
-        fetch(new RegExp("^blob:(.*?)[^/]*$").exec(self.location)[1] + "words/sowpods.txt")
+        var sowpods, list, letters, flag = 0,
+            `+/* https://en.oxforddictionaries.com/explore/which-letters-are-used-most */`
+            letter_weights = { 'E': 5688, 'A': 4331, 'R': 3864, 'I': 3845, 'O': 3651, 'T': 3543,
+              'N': 3392, 'S': 2923, 'L': 2798, 'C': 2313, 'U': 1851, 'D': 1725,
+              'P': 1614, 'M': 1536, 'H': 1531, 'G': 1259, 'B': 1056, 'F': 924,
+              'Y': 906, 'W': 657, 'K': 561, 'V': 513, 'X': 148, 'Z': 139, 'J': 100, 'Q': 100 },
+            cuml_weights = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split('')
+              .reduce((acc, nxt) => acc.concat([acc[0] += letter_weights[nxt]]), [0]).slice(1, 27);
+        fetch(new RegExp('^blob:(.*?)[^/]*$').exec(self.location)[1] + 'words/sowpods.txt')
           .then(res => res.text()).then(string => {
-            sowpods = string.split(new RegExp("\\r\\n|\\n"))
+            sowpods = string.split(new RegExp('\\r\\n|\\n'))
           }).then(getWords);
-
-        function getWords() {
-          `+/* https://en.oxforddictionaries.com/explore/which-letters-are-used-most */`
-          var letter_weights = { 'E': 5688, 'A': 4331, 'R': 3864, 'I': 3845, 'O': 3651, 'T': 3543,
-            'N': 3392, 'S': 2923, 'L': 2798, 'C': 2313, 'U': 1851, 'D': 1725,
-            'P': 1614, 'M': 1536, 'H': 1531, 'G': 1259, 'B': 1056, 'F': 924,
-            'Y': 906, 'W': 657, 'K': 561, 'V': 513, 'X': 148, 'Z': 139, 'J': 100, 'Q': 100 };
-
-          var cuml_letters = "ABCDEFGHIJKLMNOPQRSTUVWXYZ".split('').reduce((acc, nxt) => {
-            acc.push(acc[0] += letter_weights[nxt]);
-            return acc
-          }, [0]).slice(1, 27);
-
+        function getWords () {
           letters = new Array(9).fill(0).map(() => {
-            let r = cuml_letters[25] * Math.random();
-            return "ABCDEFGHIJKLMNOPQRSTUVWXYZ".substr(cuml_letters.findIndex(x => x >= r), 1)
+            let r = cuml_weights[25] * Math.random();
+            return 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'.substr(cuml_weights.findIndex(x => x >= r), 1)
           });
-
-          list = sowpods.filter(word => {
-            if (word.length < 3) return false;
-            let w = word.split(''), i = 0, j;
-            for (; i < letters.length; i++) {
+          list = sowpods.filter(function (word) {
+            if (word.length > 9 || word.length < 3) return false;
+            for (var w = word.split(''), i = 0, j; i < letters.length; i++) {
               if ((j = w.indexOf(letters[i])) != -1) {
                 w.splice(j, 1);
                 if (!w.length) break
@@ -187,98 +189,103 @@ $.addEvents({
             }
             return !w.length
           });
-
-          if (flag & 1) {
-            postMessage({letters, list});
-            flag = 0;
-            getWords();
-          } else flag |= 2
+          if (!list.length) return getWords();
+          flag & 1 ? newGame() : flag |= 2
         }
-
-        self.onmessage = () => {
-          if (flag & 2) {
-            postMessage({letters, list});
-            flag = 0;
-            getWords();
-          } else flag |= 1
+        self.onmessage = () => flag & 2 ? newGame() : flag |= 1
+        function newGame () {
+          postMessage({letters, list});
+          flag = 0;
+          getWords()
         }
       `], {type: 'application/javascript'});
       worker = new Worker(URL.createObjectURL(blob));
       worker.onmessage = function(event) {
         var data = event.data;
-        if (typeof data == 'string') return console.log(data)
         if (Object.keys(data).length) {
-          ({letters, list} = data);
+
+          // Page state: before game
+          letters = data.letters;
+          list = data.list;
           left = list.slice();
           score = 0;
           found = [];
-          interact.classList.remove("completed");
-          $(".generate")[1].classList.remove("loading");
-          $("body")[0].classList.add("play");
-          $("#board > *").forEach(x => x.innerText = null);
-          $("#words > *").forEach(x => x.remove());
-          $("#numwords")[0].innerText = "Total words: " + list.length;
-          $("#timer")[0].innerText = new Date(duration * 1000).toUTCString().match(/\d\d:\d(\d:\d\d)/)[1]
+          $('#interact')[0].classList.remove('completed');
+          $('.generate')[1].classList.remove('loading');
+          document.body.classList.add('play');
+          for (var ls = $('#board > *'), llen = ls.length, i = 0; i < llen; i++) ls[i].innerText = null;
+          $('input')[0].value = '';
+          for (var ws = $('#words > *'), wlen = ws.length, i = 0; i < wlen; i++) ws[i].remove();
+          $('#numwords')[0].innerText = 'Total words: ' + list.length;
+          $('#timer')[0].innerText = time(duration)
+
         }
       }
-      for (var board = $("#board")[0], i = 0; i < 9; i++) $.load("cell", board);
+      for (var board = $('#board')[0], i = 0; i < 9; i++) $.load('cell', board);
     }
   },
-  ".generate": {
+  '.generate': {
     click: function () {
-      if (this.classList.contains("loading")) return false;
-      this.classList.add("loading");
-      worker.postMessage("")
+
+      // Page state: retrieve game
+      if (this.classList.contains('loading')) return false;
+      this.classList.add('loading');
+      worker.postMessage('')
+
     }
   },
-  "#start": {
+  '#start': {
     click: function () {
-      var interact = $("#interact")[0], cells = $("#board > *"), i;
+
+      // Page state: begin game
+      var interact = $('#interact')[0], cells = $('#board > *'), i;
       for (i = 0; i < 9; i++) cells[i].innerText = letters[i];
-      interact.classList.add("active");
-      var seconds = 0, ix = setInterval(() => {
-        if (++seconds >= duration) {
+      interact.classList.add('active');
+      var timer = 0, ix = setInterval(() => {
+        if (++timer >= duration) {
+
+          // Page state: complete game
           clearInterval(ix);
-          interact.classList.remove("active");
-          interact.classList.add("completed");
-          $("#score")[0].innerText = "Score: " + score;
-          $("#numwords")[0].innerText = "Words: " + found.length + " / " + list.length;
-          let words = $("#words")[0];
-          $.load("divider", words);
-          left.forEach(wd => {
-            $.load("word", words);
-            $(".word", words.lastChild)[0].innerText = wd;
-            $(".score", words.lastChild)[0].innerText = [0, 0, 0, 1, 1, 2, 3, 5, 8, 11][wd.length];
-          })
+          interact.classList.remove('active');
+          interact.classList.add('completed');
+          $('#score')[0].innerText = 'Score: ' + score;
+          $('#numwords')[0].innerText = 'Words: ' + found.length + ' / ' + list.length;
+          let words = $('#words')[0];
+          $.load('divider', words);
+          for (var llen = left.length, i = 0, wd; i < llen; i++) {
+            $.load('word', words);
+            $('.word', words.lastChild)[0].innerText = wd = left[i];
+            $('.score', words.lastChild)[0].innerText = [0, 0, 0, 1, 1, 2, 3, 5, 8, 11][wd.length];
+          }
+
         }
-        $("#timer")[0].innerText = new Date((duration - seconds) * 1000).toUTCString().match(/\d\d:\d(\d:\d\d)/)[1]
+        $('#timer')[0].innerText = time(duration - timer)
       }, 1000);
-      $("input")[0].focus()
+      $('input')[0].focus()
+
     }
   },
-  "input": {
+  'input': {
     keypress: function (e) {
-      var ix, wd = this.value.toUpperCase();
-      if (e.key == "Enter") {
-        var invalid = $("#invalid")[0];
-        if ((ix = list.indexOf(wd)) != -1) {
-          if (found.indexOf(wd) == -1) {
-            var words = $("#words")[0], wscore = [0, 0, 0, 1, 1, 2, 3, 5, 8, 11][wd.length];
-            found.push(wd);
-            left.splice(left.indexOf(wd), 1);
-            score += wscore;
-            $.load("word", words);
-            $(".word", words.lastChild)[0].innerText = wd;
-            $(".score", words.lastChild)[0].innerText = wscore;
-            invalid.innerText = "";
-            words.scrollLeft = words.scrollWidth - words.offsetWidth
-          } else {
-            invalid.innerText = "Already found"
-          }
-        } else {
-          invalid.innerText = "Not accepted"
+      var wd = this.value.toUpperCase();
+      if (e.key == 'Enter') {
+        var invalid = $('#invalid')[0];
+        if (list.indexOf(wd) == -1) invalid.innerText = 'Not accepted';
+        else if (found.indexOf(wd) > -1) invalid.innerText = 'Already found';
+        else {
+
+          // Page state: found word
+          var words = $('#words')[0], wscore = [0, 0, 0, 1, 1, 2, 3, 5, 8, 11][wd.length];
+          found.push(left.splice(left.indexOf(wd), 1)[0]);
+          score += wscore;
+          $.load('word', words);
+          $('.word', words.lastChild)[0].innerText = wd;
+          $('.score', words.lastChild)[0].innerText = wscore;
+          invalid.innerText = '';
+          words.scrollLeft = words.scrollWidth - words.offsetWidth
+
         }
-        this.value = ""
+        this.value = ''
       }
     }
   }
