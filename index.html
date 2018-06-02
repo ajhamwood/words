@@ -13,6 +13,7 @@ html, body {
   text-align: center;
   overflow: hidden;
   height: 100% }
+
 .button {
   display: inline-block;
   font-size: xx-large;
@@ -20,67 +21,92 @@ html, body {
   border: 1px solid black;
   padding: .3em .8em;
   border-radius: .2em;
-  cursor: pointer }
-#description {
-  margin: 4rem 20%;
-  background: #dfd;
-  padding: 1.5rem;
-  border-radius: 2rem;
-  font: 10pt/2rem mono }
+  cursor: pointer;
+  background: #fff;
+  -webkit-user-select: none;
+  -moz-user-select: none;
+  -ms-user-select: none;
+  user-select: none }
+  .button:active { background: #ccc }
+.active > .start, .completed > .start,
+:not(.active) > .board > :last-child,
+:not(.active) > .input,
+:not(.active) > .invalid,
+:not(.completed) > .finalscore,
+.active > .numwords,
+.interact:not(.completed) ~ .generate { display: none }
 
-#spinner {
-  display: inline-block;
-  height: .8em;
-  width: .8em;
-  margin: 0 0 -.15em .7em;
-  border-radius: .8em;
-  box-shadow: inset 0 0 0 .15em #fff;
-  border: 2px solid;
-  border-color: #090 #cc0 #cc0 #090;
-  background: linear-gradient(-45deg, #090, #090 50%, #cc0 50%, #cc0);
-  animation: spinner 1s infinite linear }
-@keyframes spinner {
-  0% { transform: rotateZ(0deg) }
-  100% { transform: rotateZ(360deg) } }
-:not(.loading) > #spinner {
-  display: none }
+.initial { height: 100% }
+.play > .initial { display: none }
+  .spinner {
+    display: inline-block;
+    height: .8em;
+    width: .8em;
+    margin: 0 0 -.15em .7em;
+    border-radius: .8em;
+    box-shadow: inset 0 0 0 .15em #fff;
+    border: 2px solid;
+    border-color: #090 #cc0 #cc0 #090;
+    background: linear-gradient(-45deg, #090, #090 50%, #cc0 50%, #cc0);
+    animation: spinner 1s infinite linear }
+    @keyframes spinner {
+      0% { transform: rotateZ(0deg) }
+      100% { transform: rotateZ(360deg) } }
+  :not(.loading) > .spinner { display: none }
+  .description {
+    margin: 4rem 20%;
+    background: #dfd;
+    padding: 1.5rem;
+    border-radius: 2rem;
+    font: 10pt/2rem mono;
+    max-height: calc(100% - 15.5rem);
+    overflow-y: auto }
 
-.play > #initial {
-  display: none }
-#content {
+.content {
   display: none;
-  flex-flow: row wrap;
+  flex-flow: row nowrap;
   height: 100% }
-.play > #content {
-  display: flex }
-#content > * {
-  flex: 1 }
-#board {
-  display: grid;
-  width: calc(6em + 20px);
-  margin: 0 auto;
-  padding: 2em;
-  grid-template-columns: repeat(3, 1fr);
-  grid-gap: 10px;
-  font-size: xx-large }
-#board > * {
-  background: #ccc;
-  border-radius: .5em;
-  width: 2em;
-  height: 2em;
-  line-height: 2em }
-.active > #start, .completed > #start,
-:not(.active) > input,
-:not(.active) > #invalid,
-:not(.completed) > #score,
-.active > #numwords,
-:not(.completed) + #list > .generate {
-  display: none }
-#score {
-  font-size: xx-large }
-#list {
-  height: 100% }
-#words {
+.play > .content { display: flex }
+  .interact, .words { flex: 1 }
+  .interact > * { line-height: 1.2em }
+  .board {
+    display: grid;
+    width: calc(6em + 20px);
+    margin: 0 auto;
+    padding: 2em 0 10px;
+    grid-template-columns: repeat(3, 1fr);
+    grid-gap: 10px;
+    font-size: xx-large }
+    .board > * {
+      background: #ccc;
+      border-radius: .5em;
+      width: 2em;
+      height: 2em;
+      line-height: 2em }
+    .board > :last-child {
+      height: 2rem;
+      line-height: 2em;
+      font-size: medium;
+      width: calc(12rem + 20px);
+      grid-column: 1/-1;
+      border-radius: .75em;
+      border: 1px solid black;
+      background: #fff;
+      box-sizing: border-box }
+    .board > :last-child:active { background: #ccc }
+    .pressed { color: #aaa }
+  .input::after,
+  .invalid::after { content: '\200b' }
+  .finalscore { font-size: xx-large }
+
+.timer {
+  background: #fff;
+  border: 1px solid #ddd;
+  position: absolute;
+  top: 5px;
+  right: 5px;
+  padding: .5rem }
+.words {
   text-align: left;
   padding-right: 0;
   height: calc(100% - 9em);
@@ -89,52 +115,79 @@ html, body {
   display: flex;
   flex-flow: column wrap;
   align-content: flex-start }
-#words > * {
-  margin-right: 1em }
-.word {
-  margin-right: .8em }
-.divider {
-  height: 1em }
-.divider ~ * {
-  color: #070;
-  font-weight: bold }
-#words > :last-child {
-  margin-right: 8em }
-#list > .generate {
+  .words > * { margin-right: 1em }
+  .word { margin-right: .8em }
+  .divider { height: 1em }
+  .divider ~ * {
+    color: #070;
+    font-weight: bold }
+  .words > :last-child { margin-right: 8em }
+.content > .generate {
   position: fixed;
   bottom: .5em;
   right: 1em }
-#timer {
-  background: #fff;
-  border: 1px solid #ddd;
-  position: absolute;
-  top: 5px;
-  right: 5px;
-  padding: .5rem }
+@media (max-width: 30em) {
+  .generate {
+    margin: .5em;
+    width: calc(100vw - 1em);
+    padding: .3em 0 }
+  .description {
+    margin: 0 1rem;
+    max-height: calc(100vh - 9.6rem) }
+  .content { flex-flow: column nowrap }
+    .words {
+      height: calc(100vh - 27.2rem - 40px);
+      font-size: small }
+  .content > .generate {
+    margin: 0 .5em .5em;
+    position: unset } }
+@media (max-width: 30em) and (max-height: 35em) {
+  .timer {
+    right: unset;
+    left: 5px;
+    font-size: small }
+  .board {
+    padding: .5em;
+    grid-auto-flow: column;
+    grid-template-rows: repeat(3, 1fr) }
+    .board > :last-child {
+      grid-column: auto;
+      grid-row: 1/-1;
+      height: calc(12rem + 20px);
+      width: 2em;
+      writing-mode: vertical-rl;
+      text-orientation: upright }
+  .words {
+    height: calc(100vh - 23.2rem - 20px);
+    font-size: xx-small } }
   </style>
 </head>
 <body>
-  <div id="initial">
-    <div class='button generate'>New Game<div id='spinner'></div></div>
-    <div id="description">In this game, you will be given 9 letters. You have 3 minutes to find as many words as you can using only these letters. Words must be at least 3 letters long. If you are given more than one copy of a letter, acceptable words cannot contain more than the number of copies of that letter. The complete word list is the <a href='https://en.wikipedia.org/wiki/Collins_Scrabble_Words'>SOWPODS corpus</a>.</div>
+  <div class="initial">
+    <div class='button generate'>New Game<div class='spinner'></div></div>
+    <div class="description">
+      In this game, you will be given 9 letters.
+      You have 3 minutes to find as many words as you can using only these letters.
+      Words must be at least 3 letters long.
+      If you are given more than one copy of a letter, acceptable words cannot contain more than the number of copies of that letter.
+      The complete word list is the <a href='https://en.wikipedia.org/wiki/Collins_Scrabble_Words'>SOWPODS corpus</a>.
+    </div>
   </div>
-  <div id='content'>
-    <div id='interact'>
-      <div id='board'></div>
-      <div id='start' class='button'>START</div>
-      <input type='text' />
-      <div id='invalid'></div>
-      <div id='score'></div>
-      <div id='numwords'></div>
+  <div class='content'>
+    <div class='timer'></div>
+    <div class='interact'>
+      <div class='board'></div>
+      <div class='button start'>START</div>
+      <div class='input'></div>
+      <div class='invalid'></div>
+      <div class='finalscore'></div>
+      <div class='numwords'></div>
     </div>
-    <div id='list'>
-      <div id='timer'></div>
-      <div id='words'></div>
-      <div class='button generate'>New Game<div id='spinner'></div></div>
-    </div>
+    <div class='words'></div>
+    <div class='button generate'>New Game<div id='spinner'></div></div>
   </div>
   <template id='cell'
-    ><div></div
+    ><div tabindex='-1'></div
   ></template>
   <template id='word'
     ><div
@@ -152,143 +205,191 @@ $.addEvents = function (obj, node) {
   for (var q in obj) for (var e in obj[q])
     for (var ns = q ? $(q, node) : [window, document], es = e.split(' '), i = 0; i < es.length; i++)
       typeof ns === 'undefined' || ns.forEach(n => n.addEventListener(es[i], obj[q][e].bind(n))) };
-$.load = function (id, node) { (node || document.body).appendChild(document.importNode($('#' + id)[0].content, true)) };
+$.load = function (id, query) {
+  (typeof query === 'undefined' ? [document.body] : $(query))
+    .forEach(n => n.appendChild(document.importNode($('template#' + id)[0].content, true))) };
+$.Machine = function (s) {
+  let events = [], state = Object.seal(s);
+  return Object.assign(this, {
+    getState () { return state },
+    on (event, fn) { (events[event] = events[event] || []).push(fn); return this },
+    emit (event, ...args) { return event in events && events[event].reduce((s, fn) => (fn.apply(s, args), s), state) },
+    stop (event, fname = '') { event in events && events[event].splice(events[event].findIndex(fn => fn.name == fname), 1); return this } }) };
 
-// Game event logic
-var letters, list, found = [], left, score = 0, duration = 180, worker;
 function time (t) { return Math.floor(t / 60) + ":" + ("0" + t % 60).slice(-2) }
+function shuffle (ary) { return ary.reduceRight((a, j, i) => ([a[i], a[j]] = [a[j = Math.floor(Math.random() * (i + 1))], a[i]], a), ary) }
+
+
+// Game logic
+
+// Multiplayer idea: words get crossed out as other players find them (or crossed out word added to own list),
+// at end you can compare individual vs team completion of all words
+var game = new $.Machine({
+      worker: null,
+      duration: 180,
+      score: null,
+      letters: null,
+      list: null,
+      found: null,
+      validletters: null,
+      wordbuffer: null
+    })
+
+    // Creates a worker from plain JS and attaches it to game machine.
+    .on('setworker', function (text) {
+      this.worker = new Worker(URL.createObjectURL(new Blob([text], {type: 'application/javascript'})))
+    })
+
+    // Signals worker to send new game data.
+    .on('generate', function (el) {
+      if (el.classList.contains('loading')) return false;
+      el.classList.add('loading');
+      this.worker.postMessage('')
+    })
+
+    // Loads a new game based on game data.
+    .on('receive', function (data) {
+      Object.assign(this, data, {
+        score: 0,
+        found: [],
+        validletters: data.letters.slice(),
+        wordbuffer: ''
+      });
+      $('.interact')[0].classList.remove('completed');
+      $('.generate')[1].classList.remove('loading');
+      document.body.classList.add('play');
+      $('.board > :nth-last-child(n+2)').forEach(x => x.innerText = null);
+      $('.input')[0].textContent = '';
+      for (let words = $('.words > *'), wl = words.length; wl;) words[--wl].remove();
+      $('.numwords')[0].innerText = 'Total words: ' + this.list.length;
+      $('.timer')[0].innerText = time(this.duration)
+    })
+
+    // Starts a new game.
+    .on('start', function (type) {
+      $('.board > :nth-last-child(n+2)').forEach((x, i) => x.innerText = this.letters[i]);
+      $('.interact')[0].classList.add('active');
+      var timer = 0, ix = setInterval(() => {
+        if (++timer >= this.duration) game.emit('complete', ix);
+        $('.timer')[0].innerText = time(this.duration - timer)
+      }, 1000)
+    })
+
+    // Types a letter.
+    .on('type', function (cell) {
+      var key = cell.textContent;
+      if (!~this.validletters.indexOf(key)) return;
+      cell.classList.add('pressed');
+      this.validletters.splice(this.validletters.findIndex(x => x == key), 1);
+      $('.input')[0].textContent = (this.wordbuffer += key)
+    })
+
+    // Attempts to submit a word as 'found'.
+    .on('submit', function () {
+      var invalid = $('.invalid')[0];
+      if (this.found.indexOf(this.wordbuffer) > -1) invalid.innerText = 'Already found';
+      else if (this.list.indexOf(this.wordbuffer) == -1) invalid.innerText = 'Not accepted';
+      else game.emit('found', this.wordbuffer);
+      this.validletters = this.letters.slice();
+      $('.pressed').forEach(x => x.classList.remove('pressed'));
+      $('.input')[0].textContent = this.wordbuffer = ''
+    })
+
+    // Accepts a found word from player.
+    .on('found', function (word) {
+      var words = $('.words')[0], wscore = [0, 0, 0, 1, 1, 2, 3, 5, 8, 11][word.length];
+      this.found.push(this.list.splice(this.list.indexOf(word), 1)[0]);
+      this.score += wscore;
+      $.load('word', '.words');
+      $('.word', words.lastChild)[0].innerText = word;
+      $('.score', words.lastChild)[0].innerText = wscore;
+      $('.invalid')[0].innerText = '';
+      words.scrollLeft = words.scrollWidth - words.offsetWidth
+    })
+
+    // Finishes game and displays game info.
+    .on('complete', function (ix) {
+      clearInterval(ix);
+      var interact = $('.interact')[0];
+      interact.classList.remove('active');
+      interact.classList.add('completed');
+      $('.pressed').forEach(x => x.classList.remove('pressed'));
+      $('.finalscore')[0].innerText = 'Score: ' + this.score;
+      $('.numwords')[0].innerText = 'Words: ' + this.found.length + ' / ' + (this.list.length + this.found.length);
+      let words = $('.words')[0];
+      $.load('divider', '.words');
+      for (var llen = this.list.length, i = 0, wd; i < llen; i++) {
+        $.load('word', '.words');
+        $('.word', words.lastChild)[0].innerText = wd = this.list[i];
+        $('.score', words.lastChild)[0].innerText = [0, 0, 0, 1, 1, 2, 3, 5, 8, 11][wd.length];
+      };
+    });
+
+// Game generator
+game.workerJS = `
+  var sowpods, list, letters, flag = 0,
+      // https://en.oxforddictionaries.com/explore/which-letters-are-used-most
+      letter_weights = { 'E': 5688, 'A': 4331, 'R': 3864, 'I': 3845, 'O': 3651, 'T': 3543,
+        'N': 3392, 'S': 2923, 'L': 2798, 'C': 2313, 'U': 1851, 'D': 1725,
+        'P': 1614, 'M': 1536, 'H': 1531, 'G': 1259, 'B': 1056, 'F': 924,
+        'Y': 906, 'W': 657, 'K': 561, 'V': 513, 'X': 148, 'Z': 139, 'J': 100, 'Q': 100 },
+      cuml_weights = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split('')
+        .reduce((acc, nxt) => acc.concat([acc[0] += letter_weights[nxt]]), [0]).slice(1, 27);
+  fetch(self.location.origin + '/words/sowpods.txt')
+    .then(res => res.text()).then(string => {
+      sowpods = string.split(new RegExp('\\r\\n|\\n'))
+    }).then(getWords);
+  function getWords () {
+    letters = new Array(9).fill(0).map(() => {
+      let r = cuml_weights[25] * Math.random();
+      return 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'.substr(cuml_weights.findIndex(x => x >= r), 1)
+    });
+    list = sowpods.filter(word => {
+      if (word.length > 9 || word.length < 3) return false;
+      for (var w = word.split(''), i = 0, j; i < letters.length; i++) {
+        if ((j = w.indexOf(letters[i])) != -1) {
+          w.splice(j, 1);
+          if (!w.length) break
+        }
+      }
+      return !w.length
+    });
+    if (!list.length) return getWords();
+    flag & 1 ? newGame() : flag |= 2
+  }
+  self.onmessage = () => flag & 2 ? newGame() : flag |= 1
+  function newGame () {
+    postMessage({letters, list});
+    flag = 0;
+    getWords()
+  }
+`;
+
+// UI events
 $.addEvents({
   '': {
     load: function () {
-      // Game generator webworker
-      var blob = new Blob([`
-        var sowpods, list, letters, flag = 0,
-            `+/* https://en.oxforddictionaries.com/explore/which-letters-are-used-most */`
-            letter_weights = { 'E': 5688, 'A': 4331, 'R': 3864, 'I': 3845, 'O': 3651, 'T': 3543,
-              'N': 3392, 'S': 2923, 'L': 2798, 'C': 2313, 'U': 1851, 'D': 1725,
-              'P': 1614, 'M': 1536, 'H': 1531, 'G': 1259, 'B': 1056, 'F': 924,
-              'Y': 906, 'W': 657, 'K': 561, 'V': 513, 'X': 148, 'Z': 139, 'J': 100, 'Q': 100 },
-            cuml_weights = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split('')
-              .reduce((acc, nxt) => acc.concat([acc[0] += letter_weights[nxt]]), [0]).slice(1, 27);
-        fetch(new RegExp('^blob:(.*?)[^/]*$').exec(self.location)[1] + 'words/sowpods.txt')
-          .then(res => res.text()).then(string => {
-            sowpods = string.split(new RegExp('\\r\\n|\\n'))
-          }).then(getWords);
-        function getWords () {
-          letters = new Array(9).fill(0).map(() => {
-            let r = cuml_weights[25] * Math.random();
-            return 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'.substr(cuml_weights.findIndex(x => x >= r), 1)
-          });
-          list = sowpods.filter(function (word) {
-            if (word.length > 9 || word.length < 3) return false;
-            for (var w = word.split(''), i = 0, j; i < letters.length; i++) {
-              if ((j = w.indexOf(letters[i])) != -1) {
-                w.splice(j, 1);
-                if (!w.length) break
-              }
-            }
-            return !w.length
-          });
-          if (!list.length) return getWords();
-          flag & 1 ? newGame() : flag |= 2
-        }
-        self.onmessage = () => flag & 2 ? newGame() : flag |= 1
-        function newGame () {
-          postMessage({letters, list});
-          flag = 0;
-          getWords()
-        }
-      `], {type: 'application/javascript'});
-      worker = new Worker(URL.createObjectURL(blob));
-      worker.onmessage = function(event) {
-        var data = event.data;
-        if (Object.keys(data).length) {
-
-          // Page state: before game
-          letters = data.letters;
-          list = data.list;
-          left = list.slice();
-          score = 0;
-          found = [];
-          $('#interact')[0].classList.remove('completed');
-          $('.generate')[1].classList.remove('loading');
-          document.body.classList.add('play');
-          for (var ls = $('#board > *'), llen = ls.length, i = 0; i < llen; i++) ls[i].innerText = null;
-          $('input')[0].value = '';
-          for (var ws = $('#words > *'), wlen = ws.length, i = 0; i < wlen; i++) ws[i].remove();
-          $('#numwords')[0].innerText = 'Total words: ' + list.length;
-          $('#timer')[0].innerText = time(duration)
-
-        }
-      }
-      for (var board = $('#board')[0], i = 0; i < 9; i++) $.load('cell', board);
-    }
-  },
-  '.generate': {
-    click: function () {
-
-      // Page state: retrieve game
-      if (this.classList.contains('loading')) return false;
-      this.classList.add('loading');
-      worker.postMessage('')
-
-    }
-  },
-  '#start': {
-    click: function () {
-
-      // Page state: begin game
-      var interact = $('#interact')[0], cells = $('#board > *'), i;
-      for (i = 0; i < 9; i++) cells[i].innerText = letters[i];
-      interact.classList.add('active');
-      var timer = 0, ix = setInterval(() => {
-        if (++timer >= duration) {
-
-          // Page state: complete game
-          clearInterval(ix);
-          interact.classList.remove('active');
-          interact.classList.add('completed');
-          $('#score')[0].innerText = 'Score: ' + score;
-          $('#numwords')[0].innerText = 'Words: ' + found.length + ' / ' + list.length;
-          let words = $('#words')[0];
-          $.load('divider', words);
-          for (var llen = left.length, i = 0, wd; i < llen; i++) {
-            $.load('word', words);
-            $('.word', words.lastChild)[0].innerText = wd = left[i];
-            $('.score', words.lastChild)[0].innerText = [0, 0, 0, 1, 1, 2, 3, 5, 8, 11][wd.length];
-          }
-
-        }
-        $('#timer')[0].innerText = time(duration - timer)
-      }, 1000);
-      $('input')[0].focus()
-
-    }
-  },
-  'input': {
+      game.emit('setworker', game.workerJS).worker.onmessage = e => game.emit('receive', e.data);
+      for (var i = 0; i < 10; i++) $.load('cell', '.board');
+      $('.board > :last-child')[0].textContent = 'SUBMIT';
+      $.addEvents({
+        '.board > :nth-last-child(n+2)': { 'click touchend': function (e) {
+          e.preventDefault();
+          if ($('.active').length && !this.classList.contains('pressed')) game.emit('type', this)
+        } },
+        '.board > :last-child': { 'click touchend': function (e) { e.preventDefault(); game.emit('submit') } }
+      })
+    },
     keypress: function (e) {
-      var wd = this.value.toUpperCase();
-      if (e.key == 'Enter') {
-        var invalid = $('#invalid')[0];
-        if (list.indexOf(wd) == -1) invalid.innerText = 'Not accepted';
-        else if (found.indexOf(wd) > -1) invalid.innerText = 'Already found';
-        else {
-
-          // Page state: found word
-          var words = $('#words')[0], wscore = [0, 0, 0, 1, 1, 2, 3, 5, 8, 11][wd.length];
-          found.push(left.splice(left.indexOf(wd), 1)[0]);
-          score += wscore;
-          $.load('word', words);
-          $('.word', words.lastChild)[0].innerText = wd;
-          $('.score', words.lastChild)[0].innerText = wscore;
-          invalid.innerText = '';
-          words.scrollLeft = words.scrollWidth - words.offsetWidth
-
-        }
-        this.value = ''
-      }
+      e.stopPropagation();
+      if (!$('.active').length) return;
+      let key = e.key.toUpperCase();
+      if (key == 'ENTER') game.emit('submit');
+      else shuffle($('.board > :nth-last-child(n+2):not(.pressed)')).every(x => x.textContent != key || !game.emit('type', x))
     }
-  }
+  },
+  '.generate': { 'click touchend': function (e) { e.preventDefault(); game.emit('generate', this) } },
+  '.start': { 'click touchend': function (e) { e.preventDefault(); game.emit('start', e.type) } }
 })
   </script>
 </body>
