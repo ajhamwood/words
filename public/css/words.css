@@ -1,0 +1,323 @@
+html, body {
+  margin: 0;
+  text-align: center;
+  overflow: hidden;
+  height: 100% }
+
+.button {
+  display: inline-block;
+  font-size: xx-large;
+  margin: 1em 0 .5em;
+  border: 1px solid black;
+  padding: .3em .8em;
+  line-height: 1.2em;
+  border-radius: .2em;
+  cursor: pointer;
+  background: #fff;
+  -webkit-user-select: none;
+  -moz-user-select: none;
+  -ms-user-select: none;
+  user-select: none;
+  white-space: nowrap }
+  .button:active { background: #ccc }
+.hide { display: none !important }
+.invalid {
+  color: #ff4136;
+  display: block;
+  width: 100% }
+  [data-disabled] {
+    background: #ddd;
+    opacity: .4;
+    border-color: #888 }
+.active > .start, .completed > .start,
+:not(.active) > .board > :nth-last-child(-n+2),
+:not(.active) > .input,
+.interact:not(.active) > .invalid,
+:not(.completed) > .finalscore,
+.active > .numwords,
+.interact:not(.completed) ~ .newgame,
+.interact.ready ~ .words,
+.interact:not(.ready) ~ .room,
+.interact:not(.ready) > .actions,
+.countdown .actions, .countdown .kick { display: none }
+
+.initial {
+  height: 100%;
+  display: flex;
+  flex-flow: column nowrap }
+.play > .initial { display: none }
+  .spinner {
+    display: inline-block;
+    height: .8em;
+    width: .8em;
+    margin: 0 0 -.15em .7em;
+    border-radius: .8em;
+    box-shadow: inset 0 0 0 .15em #fff;
+    border: 2px solid;
+    border-color: #090 #cc0 #cc0 #090;
+    background: linear-gradient(-45deg, #090, #090 50%, #cc0 50%, #cc0);
+    animation: spinner 1s infinite linear }
+    @keyframes spinner {
+      0% { transform: rotateZ(0deg) }
+      100% { transform: rotateZ(360deg) } }
+  :not(.loading) > .spinner { display: none }
+  .plurality { margin-top: 1rem }
+  .plurality:not(.active) { margin: 0 }
+  .plurality.active > .header,
+  .plurality:not(.active) > .button { display: none }
+  .header {
+    display: flex;
+    align-items: center;
+    margin: 1rem;
+    cursor: pointer }
+    .header::before, .header::after {
+      content: "";
+      background: black;
+      height: 1px;
+      flex: 1 }
+    .playercount {
+      display: inline-block;
+      background: #ff4136;
+      color: #fff;
+      width: 2rem;
+      height: 2rem;
+      margin: -.4rem .3rem;
+      border-radius: 1rem;
+      font: bold large/2rem sans }
+  .create-user { margin: 0 1rem 1rem !important }
+    .create-user > :not(.invalid) {
+      display: flex;
+      width: 100%;
+      flex-flow: column nowrap;
+      align-items: center }
+      .create-user input {
+        flex: 1;
+        min-width: 5rem;
+        max-width: 10rem }
+      .create-user span {
+        margin: calc(1.3em + 1px) 0 calc(.8em + 1px);
+        font-size: xx-large }
+  .gametype > .button.selected {
+    font-weight: bold;
+    color: #000a }
+  .uniques.selected {
+    border-color: turquoise;
+    background-color: turquoise }
+  .jinx.selected {
+    border-color: lightblue;
+    background-color: lightblue }
+    .votecount {
+      display: inline-block;
+      margin-left: .25em }
+    .votecount:empty { margin-left: 0 }
+  .consensus {
+    display: flex;
+    width: 100vw;
+    height: 1.2rem;
+    margin: .5rem 0 -.5rem }
+  .consensus.active { background: lightblue }
+    .consensus.active > * {
+      transition-property: flex;
+      transition-timing-function: linear;
+      transition-duration: 0s;
+      background: turquoise }
+    .consensus > .left { flex: 0 !important }
+    .consensus > .right { flex: 1 !important }
+  .description {
+    margin: 4rem 20%;
+    background: #dfd;
+    padding: 1.5rem;
+    border-radius: 2rem;
+    font: 10pt/2rem mono;
+    overflow-y: auto }
+    .description p:first-child { margin-top: 0 }
+    .description p:last-child { margin-bottom: 0 }
+    .description b { font-size: larger }
+
+.content {
+  display: none;
+  flex-flow: row nowrap;
+  height: 100% }
+.play > .content { display: flex }
+  .interact, .words { flex: 1 }
+  .board {
+    display: grid;
+    width: calc(6em + 20px);
+    margin: 0 auto;
+    padding: 2em 0 10px;
+    grid-template-columns: repeat(3, 1fr);
+    grid-gap: 10px;
+    font-size: xx-large }
+    .board > * {
+      background: #ccc;
+      border-radius: .5em;
+      width: 2em;
+      height: 2em;
+      line-height: 2em }
+    .board > :nth-last-child(-n+2) {
+      height: 2rem;
+      line-height: 2em;
+      font-size: medium;
+      border-radius: .75em;
+      border: 1px solid black;
+      background: #fff;
+      box-sizing: border-box }
+    .board > :nth-last-child(2) {
+      width: calc(8rem + 10px);
+      grid-column: 1/3 }
+    .board > :last-child {
+      width: 4rem;
+      grid-column: 3/3 }
+    .board > :last-child:active { background: #ccc }
+    .pressed { color: #aaa }
+  .input::after,
+  .invalid::after { content: '\200b' }
+  :not(.ready) > .actions { display: none }
+  .actions > :nth-child(n+2) { margin-left: 1rem }
+  .lock.locked::after { content: '🔒' }
+  .lock:not(.locked)::after { content: '🔓' }
+  .finalscore { font-size: xx-large }
+
+.timer {
+  background: #fff;
+  border: 1px solid #ddd;
+  position: absolute;
+  top: 5px;
+  right: 5px;
+  padding: .5rem }
+.room {
+  flex: 1;
+  display: flex;
+  flex-flow: column nowrap;
+  margin: 1rem;
+  text-align: left;
+  min-height: 0 }
+  .emotes {
+    flex: 0 4rem;
+    margin-bottom: 1rem;
+    overflow: auto }
+    .emotes > input {
+      width: 1.2rem;
+      text-align: center }
+  .playerlist { flex: 1 }
+  .words, .playerlist {
+    display: flex;
+    flex-flow: column wrap;
+    align-content: flex-start;
+    overflow-x: auto }
+    .emote {
+      padding: .2rem;
+      width: 1.5rem;
+      height: 1.5rem;
+      font-size: x-large;
+      display: inline-block;
+      cursor: pointer;
+      text-align: center }
+      .emote::after { content: '\200b' }
+    .playerlist .emote {
+      opacity: 0;
+      transition: opacity 1s 5s }
+    .emote.flash {
+      opacity: 1;
+      transition: none }
+    .kick {
+      cursor: pointer;
+      margin-left: .5rem }
+    .playerlist:not(.host) .kick { display: none }
+.words {
+  text-align: left;
+  padding-right: 0;
+  height: calc(100% - 9em);
+  margin: 1em }
+.words.jinx-mode { flex-flow: row nowrap }
+  .words > *, .remaining > * { margin-right: 1em }
+  .strike { text-decoration: line-through }
+  .word::after { content: ' ' }
+  .divider { height: 1em }
+  .divider.repeats, .divider.playerwords {
+    height: auto;
+    margin: .5em 1em 0 .5em }
+  .divider.repeats::before { content: 'Repeats' }
+  .divider:not(.repeats):not(.playerwords) ~ *,
+  .remaining {
+    color: #070;
+    font-weight: bold }
+  .words > .column { white-space: nowrap }
+  .column { margin-bottom: 1rem }
+    .column > ::after { content: '\200b' }
+  .words > :last-child:not(.jinx-words) { margin-right: 8em }
+    .words > .column > * { font-weight: bold }
+  .jinx-words {
+    display: flex;
+    flex-flow: row wrap;
+    overflow: auto;
+    align-content: start;
+    flex: 1 }
+    .jinx-words > .column { margin-right: .5rem }
+    .remaining {
+      flex: 100%;
+      columns: 12em;
+      column-gap: 0 }
+.newgame {
+  position: fixed;
+  bottom: .5em;
+  right: 1em }
+@media (max-width: 30em) {
+  .button {
+    margin: 0 .5rem;
+    box-sizing: border-box;
+    font-size: large }
+  .gametype { margin-top: 0 !important }
+  .modechooser > * {
+    display: flex;
+    flex-flow: row wrap;
+    justify-content: space-evenly;
+    margin: 1rem .5rem }
+    .header { width: 100% }
+    .modechooser .button { flex: 1 1 0 }
+    .role > .button { flex: none }
+    .create-user span {
+      margin: calc(.3rem + 1px) 0;
+      font-size: large }
+    .create-user input {
+      margin-left: 1rem;
+      max-width: none }
+    .create-user > :not(.invalid) { flex-flow: row }
+    .consensus { margin: .5rem -.5rem -.5rem }
+  .solo, .newgame {
+    width: calc(100vw - 1em);
+    padding: .3em 0 }
+  .description { margin: 0 1rem 1rem }
+  .content { flex-flow: column nowrap }
+    .words {
+      height: calc(100vh - 27.2rem - 40px);
+      font-size: small }
+    .room { flex-flow: row nowrap }
+      .emotes { margin: 0 1rem 0 0 }
+    .button.start { margin: .5rem 0 }
+  .newgame {
+    margin: 0 .5em .5em;
+    position: unset } }
+@media (max-width: 30em) and (max-height: 35em) {
+  .timer {
+    right: unset;
+    left: 5px;
+    font-size: small }
+  .board {
+    padding: .5em;
+    grid-auto-flow: column;
+    grid-template-rows: repeat(3, 1fr) }
+    .board > :nth-last-child(-n+2) {
+      grid-column: auto;
+      width: 2em;
+      writing-mode: vertical-rl;
+      text-orientation: upright }
+    .board > :nth-last-child(2) {
+      height: calc(8rem + 10px);
+      grid-row: 1/3 }
+    .board > :last-child {
+      height: 4rem;
+      grid-row: 3/3 }
+  .words {
+    height: calc(100vh - 23.2rem - 20px);
+    font-size: xx-small } }

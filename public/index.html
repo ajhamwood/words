@@ -1,0 +1,128 @@
+<!doctype html>
+<html>
+<head>
+  <title>Jinxwords</title>
+  <meta charset='UTF-8'>
+  <meta name='viewport' content='width=device-width, initial-scale=1'>
+  <meta name='keywords' content='jinxwords, word game'>
+  <meta name='description' content='Look for words that use the given letters.'>
+  <link rel='icon' type='image/x-icon' href='data:image/x-icon;base64,'>
+  <link rel='stylesheet' href='/css/words.css'>
+</head>
+<body>
+  <div class='initial'>
+    <div class='modechooser'>
+      <div class='plurality active'>
+        <div class='header'>Multiplayer&nbsp;
+          <div class='host hide'>(host)</div
+          ><div class='playercount hide'></div
+          ><div class='spinner'></div
+        ></div>
+        <div class='button solo'>Solo<div class='spinner'></div></div>
+        <div class='button multi'>Room<div class='spinner'></div></div>
+      </div>
+      <div class='create-user hide'>
+        <div class='username'>
+          <span>Username:<div class='spinner'></div></span>
+          <input type='text' pattern='[A-Za-z0-9]+'>
+        </div>
+        <div class='role hide'>
+          <div class='button'>Join room<div class='spinner'></div></div>
+          <input type='text' pattern='[A-Za-z0-9]+'>
+        </div>
+        <div class='invalid'></div>
+      </div>
+      <div class='gametype hide'>
+        <div class='button uniques'>Uniques<div class='votecount'></div><div class='spinner'></div></div>
+        <div class='button jinx'>Jinx<div class='votecount'></div><div class='spinner'></div></div>
+        <div class='consensus'><div></div></div>
+      </div>
+    </div>
+    <div class='description'>
+      <span class='welcome'>
+        <p>
+          <b>Welcome to Jinxwords.</b>
+          In this game, you are given 9 letters.
+          Using only these letters, find as many words as you can in the time you are given.
+          Words must be at least 3 letters long, and you may only use as many copies of a single letter as you are given.
+          The complete word list is the <a href='https://en.wikipedia.org/wiki/Collins_Scrabble_Words'>SOWPODS corpus</a>.
+        </p>
+        <p>Select a game mode using the interface above.</p>
+      </span>
+      <span class='desc-create hide'>
+        <p>In <b>multiplayer mode</b>, the player hosting the room chooses the game type, moderates the player list, and triggers the start of games.</p>
+        <p>
+          All players choose a username of up to 15 alphanumeric characters.
+          Hosts create a room by choosing a unique room handle.
+          Guests join a room by submitting its handle.
+        </p>
+      </span>
+      <span class='desc-multi hide'>
+        <p><b>Multiplayer games</b></p>
+        <p>
+          <b>Uniques</b> is similar to single-player mode.
+          You have 3 minutes to find as many words as possible which are different to those of your co-players.
+        </p>
+        <p>
+          <b>Jinx</b> is turn-based sudden death.
+          Each round, you have 10 seconds to find and choose a word which none of your co-players have chosen.
+          Words must not have already been played.
+          If you cannot find a word within the time limit, you will be eliminated from further play.
+        </p>
+        <p>In both game types, the player with the highest score at the end will be the winner.</p>
+      </span>
+    </div>
+  </div>
+  <div class='content'>
+    <div class='timer'></div>
+    <div class='interact ready'>
+      <div class='board'></div>
+      <div class='actions'>
+        <div class='button start'>START<div class='spinner'></div></div
+        ><div class='button lock hide'></div>
+      </div>
+      <div class='input'></div>
+      <div class='invalid'></div>
+      <div class='finalscore'></div>
+      <div class='numwords'></div>
+    </div>
+    <div class='words'></div>
+    <div class='room hide'>
+      <div class='emotes'>
+        <input type='text' pattern='[^]' placeholder='+'>
+      </div>
+      <div class='playerlist'></div>
+    </div>
+    <div class='button newgame'>New Game<div class='spinner'></div></div>
+  </div>
+  <template id='cell'
+    ><div tabindex='-1'></div
+  ></template>
+  <template id='word'
+    ><div
+      ><span class='word'></span
+      ><span class='score'></span
+    ></div
+  ></template>
+  <template id='divider'
+    ><div class='divider'></div
+  ></template>
+  <template id='emote'
+    ><span class='emote'></span
+  ></template>
+  <template id='player'
+    ><div
+      ><span class='emote'></span
+      ><span class='name'></span
+      ><span class='kick'>&#x274e;</span
+    ></div
+  ></template>
+  <template id='jinx-words'>
+    <div class='jinx-words'></div>
+  </template>
+  <template id='column'>
+    <div class='column'></div>
+  </template>
+  <script src='/js/words.js'></script>
+</body>
+</html>
