@@ -1,6 +1,6 @@
 require('dotenv').config();
 const
-  debug = require('debug')('words'),
+  debug = require('debug')('app'),
   debugWs = require('debug')('ws'),
   express = require('express'),
   { ObjectId } = require('mongodb'),
@@ -115,6 +115,7 @@ router.ws('/', (ws, req) => {
 
   ws.on('close', async function (e) {
     req.app.emit('updategame', { leave: ws });
+    clearInterval(iv);
     debugWs('Close: %s %O', ws.id, e)
   });
 
@@ -122,7 +123,11 @@ router.ws('/', (ws, req) => {
     debugWs('Error: %s %O', ws.id, e)
   });
 
-  req.app.db.collection('players').insert({ name: null, role: null, room_id: null, voted: null, found: null, round: null, ready: null })
+  ws.isAlive = true;
+  ws.on('pong', () => ws.isAlive = true);
+  var iv = setInterval(() => ws.isAlive ? (ws.ping(), ws.isAlive = false) : ws.terminate(), 30000);
+
+  req.app.db.collection('players').insert({ name: null, role: null, room_id: null, voted: null, found: null, round: null, score: null, ready: null })
     .then(r => debugWs('Open: %s', ws.id = ObjectId(r.insertedIds[0])));
   ws.send(JSON.stringify({status: 'connected'}))
 });

@@ -4,9 +4,11 @@
 // Init
 
 require('dotenv').config();
+process.env.DEBUG = { development: process.env.DEBUG_DEV, production: process.env.DEBUG_PROD }[process.env.NODE_ENV];
+process.env.MONGO_SERVER = process.env.DYNO ? process.env.MONGO_SERVER_PROD : process.env.MONGO_SERVER_DEV;
 const
-  debug = require('debug')('words'),
-  debugDb = require('debug')('db'),
+  debug = require('debug')('app'),
+  debugSrv = require('debug')('server'),
   express = require('express'),
   RateLimit = require('express-rate-limit'),
   helmet = require('helmet'),
@@ -22,19 +24,20 @@ var
   retryConn,
   port = process.env.PORT || 8000,
   host = process.env.HOST || '0.0.0.0';
-process.env.MONGO_SERVER = process.env.DYNO ? process.env.MONGO_SERVER_HEROKU : process.env.MONGO_SERVER_DEV;
+
+debugSrv('Server environment: %s', process.env.NODE_ENV);
 
 // Db connect
 
 (retryConn = () => MongoClient.connect(process.env.MONGO_SERVER, {autoReconnect: true})
   .then(client => {
-    debugDb('Connected to MongoDB');
-    return app.db = client.on('close', e => debugDb('*close %O', e.message))
-      .on('reconnect', c => debugDb('*reconnect %O', c.topology.s.host + ":" + c.topology.s.port))
+    debugSrv('Connected to MongoDB');
+    return app.db = client.on('close', e => debugSrv('*close %O', e.message))
+      .on('reconnect', c => debugSrv('*reconnect %O', c.topology.s.host + ":" + c.topology.s.port))
       .db('jinxwords')
   })
   .catch(err => {
-    debugDb('*err %s', err.name);
+    debugSrv('*err %s', err.name);
     return new Promise(resolve => setTimeout(resolve, 1000)).then(retryConn)
   })
 )().then(db => {
@@ -84,5 +87,5 @@ process.env.MONGO_SERVER = process.env.DYNO ? process.env.MONGO_SERVER_HEROKU : 
   return new Promise((resolve, reject, server) => server = app.listen(port, host, err => {
     if (err) return reject(err);
     resolve(server)
-  })).then(server => debug('Listening on port %d', server.address().port))
+  })).then(server => debugSrv('Listening on port %d', server.address().port))
 }).catch(err => debug('*err %O', err))

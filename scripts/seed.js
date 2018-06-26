@@ -2,11 +2,12 @@
 'use strict';
 
 require('dotenv').config();
+process.env.DEBUG = { development: process.env.DEBUG_DEV, production: process.env.DEBUG_PROD }[process.env.NODE_ENV];
+process.env.MONGO_SERVER = process.env.DYNO ? process.env.MONGO_SERVER_PROD : process.env.MONGO_SERVER_DEV;
 const
   debug = require('debug')('seed'),
   { MongoClient } = require('mongodb');
 var conn, db;
-process.env.MONGO_SERVER = process.env.DYNO ? process.env.MONGO_SERVER_HEROKU : process.env.MONGO_SERVER_DEV;
 
 
 MongoClient.connect(process.env.MONGO_SERVER)

@@ -1,3 +1,7 @@
+@font-face {
+  font-family: 'twemoji';
+  src: url("../fonts/Twemoji.ttf") }
+.emote, .emoji { font-family: 'twemoji' }
 html, body {
   margin: 0;
   text-align: center;
@@ -9,7 +13,7 @@ html, body {
   font-size: xx-large;
   margin: 1em 0 .5em;
   border: 1px solid black;
-  padding: .3em .8em;
+  padding: .3em .7em;
   line-height: 1.2em;
   border-radius: .2em;
   cursor: pointer;
@@ -84,6 +88,7 @@ html, body {
       margin: -.4rem .3rem;
       border-radius: 1rem;
       font: bold large/2rem sans }
+    .solo.button { margin-right: 0 }
   .create-user { margin: 0 1rem 1rem !important }
     .create-user > :not(.invalid) {
       display: flex;
@@ -92,11 +97,9 @@ html, body {
       align-items: center }
       .create-user input {
         flex: 1;
-        min-width: 5rem;
+        min-width: 2rem;
         max-width: 10rem }
-      .create-user span {
-        margin: calc(1.3em + 1px) 0 calc(.8em + 1px);
-        font-size: xx-large }
+      .modechooser .button:last-child, .jinx { margin-left: 1rem }
   .gametype > .button.selected {
     font-weight: bold;
     color: #000a }
@@ -153,7 +156,11 @@ html, body {
       border-radius: .5em;
       width: 2em;
       height: 2em;
-      line-height: 2em }
+      line-height: 2em;
+      transition: background .2s }
+    .interact.active > .board > :not(.pressed):active {
+      background: #ff4136;
+      transition: background 0s }
     .board > :nth-last-child(-n+2) {
       height: 2rem;
       line-height: 2em;
@@ -232,6 +239,7 @@ html, body {
 .words.jinx-mode { flex-flow: row nowrap }
   .words > *, .remaining > * { margin-right: 1em }
   .strike { text-decoration: line-through }
+  .freeze { font-weight: bold }
   .word::after { content: ' ' }
   .divider { height: 1em }
   .divider.repeats, .divider.playerwords {
@@ -275,14 +283,11 @@ html, body {
     margin: 1rem .5rem }
     .header { width: 100% }
     .modechooser .button { flex: 1 1 0 }
-    .role > .button { flex: none }
-    .create-user span {
-      margin: calc(.3rem + 1px) 0;
-      font-size: large }
-    .create-user input {
-      margin-left: 1rem;
-      max-width: none }
-    .create-user > :not(.invalid) { flex-flow: row }
+    .create-user .button {
+      margin: 0 0 0 1rem;
+      flex: 0 }
+    .create-user input { max-width: none }
+    .create-user > :not(.invalid) { flex-flow: row-reverse }
     .consensus { margin: .5rem -.5rem -.5rem }
   .solo, .newgame {
     width: calc(100vw - 1em);

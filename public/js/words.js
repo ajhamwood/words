@@ -48,7 +48,8 @@ $.addEvents({
           if ($('.interact.active').length && !$('.input.freeze').length && !this.classList.contains('pressed')) game.emit('type', this)
         } },
         '.board > :nth-last-child(2)': { 'click touchend': function (e) { e.preventDefault(); game.emit('submit') } },
-        '.board > :last-child': { 'click touchend': function (e) { e.preventDefault(); game.emit('type') } }
+        '.board > :last-child': { 'click touchend': function (e) { e.preventDefault(); game.emit('type') } },
+        '.board > *': { 'click touchend': function (e) { e.preventDefault(); navigator.vibrate(10) } }
       });
       game.emit('setemoteset')
     },
@@ -65,11 +66,13 @@ $.addEvents({
   '.multi': {'click touchend': function (e) { e.preventDefault(); game.emitAsync('connectmultiplayer') } },
   '.header': { 'click touchend': function (e) { e.preventDefault(); game.emit('leavemultiplayer') } },
   '.username > input': { keypress: function (e) {
-    if (e.key == "Enter" && !this.validity.patternMismatch) game.emitAsync('setusername', this.value)
+    if (e.key == "Enter" && !this.validity.valueMissing && !this.validity.patternMismatch) game.emitAsync('setusername', this.value)
   } },
-  '.role > .button': { 'click touchend': function (e) { e.preventDefault(); game.emit('togglerole') } },
-  '.role > input': { keypress: function (e) {
-    if (e.key == 'Enter' && !this.validity.patternMismatch) game.emitAsync('setroomname', this.value)
+  '.username > .button': { 'click touchend': function (e) { e.preventDefault(); let input = $('.username > input')[0];
+    if (!input.validity.valueMissing && !input.validity.patternMismatch) game.emitAsync('setusername', input.value)
+  } },
+  '.role .button': { 'click touchend': function (e) { e.preventDefault(); let input = $('.role > input')[0];
+    if (!input.validity.valueMissing && !input.validity.patternMismatch) game.emitAsync('setroomname', input.value, this)
   } },
   '.uniques': { 'click touchend': function (e) { e.preventDefault(); game.emitAsync('votegametype', 'uniques') } },
   '.jinx': { 'click touchend': function (e) { e.preventDefault(); game.emitAsync('votegametype', 'jinx') } },
@@ -122,18 +125,19 @@ var game = new $.Machine(Object.seal({
       roomname: null,
       playerlist: null,
       gametype: null,
+      voteAnimPipe: Promise.resolve(),
       consensusSpeed: 30,
       emoteset: null,
       gamestate: null,
       waiting: null,
 
       // Jinx
-      roundDuration: 10,
+      roundDuration: 15,
       eliminated: null,
       jinxround: null,
 
       // Dev
-      debug: true
+      debug: false
 
     }))
 
@@ -248,7 +252,7 @@ var game = new $.Machine(Object.seal({
             $.load('word', '.' + [...this.classList].join('.'));
             $('.word', this.lastChild)[0].textContent = wd;
             return $('.score', this.lastChild)[0].textContent = [0, 0, 0, 1, 1, 2, 3, 5, 8, 11][wd.length]
-          };
+          }, cmp = Intl.Collator ? Intl.Collator().compare : (a, b) => a > b;
       interact.classList.remove('active');
       interact.classList.add('completed');
       $('.interact > .invalid')[0].textContent = '';
@@ -270,18 +274,22 @@ var game = new $.Machine(Object.seal({
         }
         $.load('divider', '.words');
         this.list.filter(x => !~list.indexOf(x)).forEach(write);
-        temp = scores.reduce((a, b) => a[1] > b[1] ? a : b)[0];
-        $('.finalscore')[0].textContent = 'Winner: ' + temp + '!';
+        temp = scores.reduce((a, b) => a[0] && a[0][1] > b[1] ? a : a[0] && a[0][1] == b[1] ? [...a, b] : [b], []).map(x => x[0]);
+        if (temp.length == 1) $('.finalscore')[0].textContent = 'Winner: ' + temp[0] + '!';
+        if (temp.length > 1) $('.finalscore')[0].textContent = 'Tied: ' + temp.sort(cmp).join(', ');
         $('.numwords')[0].textContent = 'All words found: ' + list.length + ' / ' + (this.list.length + this.found.length)
       }
       else if (this.gametype == 'jinx') {
         $('.input')[0].classList.remove('freeze');
-        let winner = $('.words > .column > *')
-          .reduce((a, n, s) => a[0] <= (s = $('.score', n)[0].textContent) ? [s, $('.word', n)[0].textContent] : a, [0,])[1];
+        let winners = Object.entries(this.gamestate).reduce((a, x) => {
+          let x1 = { name: x[0], score: x[1][0].score };
+          return a[0] && a[0].score > x[1][0].score ? a : a[0] && a[0].score == x[1][0].score ? [...a, x1] : [x1]
+        }, []).map(x => x.name);
         $.load('column', '.jinx-words');
         $('.jinx-words > :last-child')[0].classList.add('remaining');
         this.list.forEach(write.bind($('.remaining')[0]));
-        $('.finalscore')[0].textContent = 'Winner: ' + winner + '!';
+        if (winners.length == 1)  $('.finalscore')[0].textContent = 'Winner: ' + winners[0] + '!';
+        else if (winners.length > 1)  $('.finalscore')[0].textContent = 'Tied: ' + winners.sort(cmp).join(', ');
         $('.numwords')[0].textContent = 'All words found: ' + this.found.length + ' / ' + (this.list.length + this.found.length);
       }
       else if (!this.gametype) {
@@ -307,6 +315,7 @@ var game = new $.Machine(Object.seal({
         $('.multi')[0].classList.add('loading');
         $('.room')[0].classList.remove('hide');
         $('.lock')[0].classList.remove('hide');
+        if ('name' in localStorage) $('.username > input')[0].value = localStorage.name;
         var ws = this.ws = new WebSocket('wss://' + location.host);
         ws.onopen = () => {
           this.role = 'guest';
@@ -362,6 +371,7 @@ var game = new $.Machine(Object.seal({
               else if (this.gametype == 'jinx' && kl == 1) game.emit('returngameover')
             }
             else if (kl == 1) {
+              if (data.status == 'connected') return debug(data.status)
               if (data.status == 'Username registered') {
                 game.emit('returnusername', 'ok');
                 loadPlayers([this.ownname])
@@ -423,7 +433,7 @@ var game = new $.Machine(Object.seal({
           }
         }
         ws.onclose = ws.onerror = e => {
-          debug('disconnected');
+          debug('disconnected', e.code);
           this.ws = null;
           game.emit('leavemultiplayer')
         };
@@ -443,7 +453,6 @@ var game = new $.Machine(Object.seal({
         $('.playercount')[0].textContent = '';
         $('.playercount')[0].classList.add('hide');
         $('.loading').forEach(x => x.classList.remove('loading'));
-        $('.role > .button')[0].firstChild.textContent = 'Join room'
         $('.plurality')[0].classList.add('active');
         $('.create-user')[0].classList.add('hide');
         $('.username')[0].classList.remove('hide');
@@ -476,39 +485,29 @@ var game = new $.Machine(Object.seal({
 
     // Sets username for players in the same room to see. (Async)
     .on('setusername', function (username) {
-      $('.username > span')[0].classList.add('loading');
+      $('.username > .button')[0].classList.add('loading');
       $('.create-user > .invalid')[0].textContent = '';
       return new Promise(resolve => {
         game.on('returnusername', function (v) {
           if (v == 'ok') {
+            localStorage.name = $('.username > input')[0].value;
             $('.create-user > .invalid')[0].textContent = '';
             $('.username')[0].classList.add('hide');
             $('.role')[0].classList.remove('hide');
             $('.role > input')[0].focus();
             this.playerlist.push(this.ownname = username)
           } else if (v == 'taken') $('.create-user > .invalid')[0].textContent = '*Username taken';
-          $('.username > span')[0].classList.remove('loading');
+          $('.username > .button')[0].classList.remove('loading');
           resolve(game.stop('returnusername'))
         });
         this.ws.send(JSON.stringify({username}))
       })
     })
 
-    // Sets user role in room - 'guest' or 'host'.
-    .on('togglerole', function () {
-      if (this.role == 'guest') {
-        this.role = 'host';
-        $('.role > .button')[0].firstChild.textContent = 'Host room'
-      } else if (this.role == 'host') {
-        this.role = 'guest';
-        $('.role > .button')[0].firstChild.textContent = 'Join room'
-      }
-      $('.role > input')[0].focus()
-    })
-
     // Room creation and membership. (Async)
-    .on('setroomname', function (roomname) {
-      $('.role > .button')[0].classList.add('loading');
+    .on('setroomname', function (roomname, el) {
+      this.role = el.firstChild.textContent == 'Host' ? 'host' : 'guest';
+      el.classList.add('loading');
       $('.create-user > .invalid')[0].textContent = '';
       return (this.role == 'guest' ? Promise.resolve() : new Promise(resolve => {
         game.on('returnletters', resolve);
@@ -538,7 +537,7 @@ var game = new $.Machine(Object.seal({
           else if (v == 'taken') $('.create-user > .invalid')[0].textContent = '*Roomname taken';
           else if (v == 'full') $('.create-user > .invalid')[0].textContent = '*Room is full';
           else if (v == 'inprogress') $('.create-user > .invalid')[0].textContent = '*Game is currently in progress';
-          $('.role > .button')[0].classList.remove('loading');
+          el.classList.remove('loading');
           resolve(game.stop('returnroomname'))
         });
         this.ws.send(JSON.stringify(Object.assign({role: this.role, roomname}, letters ? {letters} : {})))
@@ -549,16 +548,16 @@ var game = new $.Machine(Object.seal({
     .on('votegametype', function (gametype) {
       let buttonCL = $('.' + gametype)[0].classList;
       buttonCL.add('loading');
-      $('.selected').forEach(x => x.classList.remove('selected'));
       return new Promise(resolve => {
-        game.on('returnvote', function (v) {
+        game.on('returnvote', { [gametype] (v) {
           if (v == 'ok') {
+            $('.selected').forEach(x => x.classList.remove('selected'));
             buttonCL.add('selected');
             $('.consensus')[0].classList.add('active');
           }
           buttonCL.remove('loading');
-          resolve(game.stop('returnvote'))
-        });
+          resolve(game.stop('returnvote', gametype))
+        } }[gametype]);
         this.ws.send(JSON.stringify({gametype}))
       })
     })
@@ -568,9 +567,9 @@ var game = new $.Machine(Object.seal({
       let left = $('.consensus > *')[0], raf = () => new Promise(requestAnimationFrame), bal, csp = this.consensusSpeed;
       $('.uniques > .votecount')[0].textContent = data.uniques;
       $('.jinx > .votecount')[0].textContent = data.jinx;
-      left.classList.remove('left', 'right');
       debug('Real time vote', data)
-      return raf().then(() => {
+      return this.voteAnimPipe = this.voteAnimPipe.then(raf).then(() => {
+        left.classList.remove('left', 'right');
         left.style.transitionDuration = '';
         left.style.flex = bal = Math.min(1, Math.max(0, data.balance + (Date.now() - data.time) * data.delta / csp / 1e3))
       }).then(raf).then(() => {
@@ -649,7 +648,7 @@ var game = new $.Machine(Object.seal({
         $('.emotes > :last-child')[0].textContent = e
       });
       $('.emotes')[0].appendChild($('.emotes > input')[0]);
-      $.addEvents({'.emotes > .emote': {'click touchend': function (e) { e.preventDefault(); game.emit('setemote', this.textContent) }}})
+      $.addEvents({'.emotes > .emote': {click: function (e) { e.preventDefault(); game.emit('setemote', this.textContent) }}})
     })
 
     // Adds a character to the local emote list.
@@ -659,7 +658,7 @@ var game = new $.Machine(Object.seal({
         Object.assign(localStorage, { emoteset: JSON.stringify([...this.emoteset]) });
         $.load('emote', '.emotes');
         $('.emotes > :last-child')[0].textContent = char;
-        $.addEvents({'.emotes > :last-child': {'click touchend': function (e) { e.preventDefault(); game.emit('setemote', this.textContent) }}});
+        $.addEvents({'.emotes > :last-child': {click: function (e) { e.preventDefault(); game.emit('setemote', this.textContent) }}});
         $('.emotes')[0].appendChild($('.emotes > input')[0])
       }
     })
@@ -689,7 +688,7 @@ var game = new $.Machine(Object.seal({
       $('.start')[0].classList.remove('loading');
       let countdown = begintime - Date.now(), c = Math.ceil(countdown / 1e3), iv;
       return new Promise(resolve => {
-        setTimeout(() => iv = setInterval((function cfn () {
+        c <= 0 ? resolve() : setTimeout(() => iv = setInterval((function cfn () {
           --c ? ($('.board > :nth-child(5)')[0].textContent = c) : resolve(clearInterval(iv));
           return cfn
         })(), 1e3), countdown % 1e3)
@@ -699,7 +698,7 @@ var game = new $.Machine(Object.seal({
         $('.interact')[0].classList.remove('ready');
         $('.interact')[0].classList.add('active');
         if (this.gametype == 'jinx') {
-          this.gamestate = this.playerlist.reduce((a, x) => (a[x] = [], a), {});
+          this.gamestate = this.playerlist.reduce((a, x) => (a[x] = [{score: 0}], a), {});
           $.load('column', '.words');
           this.playerlist.forEach(name => {
             $.load('word', '.column');
@@ -709,15 +708,18 @@ var game = new $.Machine(Object.seal({
           $.load('jinx-words', '.words')
         }
       }).then(() => new Promise(resolve => {
-        let dur, timer = 0, wait = Promise.resolve(), resetTimer = final => {
-          if (final) return;
+        let dur, timer = 0, wait = Promise.resolve(), resetTimer = remaining => {
+          if (remaining == 0) return;
           if (this.gametype == 'uniques') timer = Math.ceil((Date.now() - begintime) / 1e3);
           else if (this.gametype == 'jinx') {
             if (!this.eliminated) $('.input')[0].classList.remove('freeze');
-            let timerExact = (Date.now() - begintime - this.roundDuration * this.jinxround++ * 1e3) / 1e3;
-            wait = new Promise(r => setTimeout(r, ((timer = Math.ceil(timerExact)) - timerExact) * 1e3))
+            if (remaining == 1) timer = 0;
+            else {
+              let timerExact = (Date.now() - begintime - this.roundDuration * this.jinxround++ * 1e3) / 1e3;
+              wait = new Promise(r => setTimeout(r, ((timer = Math.ceil(timerExact)) - timerExact) * 1e3))
+            }
           }
-          wait.then(() => {
+          wait = wait.then(() => {
             clearInterval(iv);
             iv = setInterval((function countdown () {
               $('.timer')[0].textContent = time(dur - timer);
@@ -726,10 +728,12 @@ var game = new $.Machine(Object.seal({
             })(), 1e3);
           });
           return resetTimer
-        }
+        };
         game.on('returngameover', function (gamestate) {
           if (gamestate) this.gamestate = gamestate;
           this.eliminated = false;
+          clearInterval(iv);
+          $('.timer')[0].textContent = time(0);
           resolve(game.stop('returngameover').stop('returnjinxroundover').emit('complete'))
         });
         if (this.gametype == 'uniques') {
@@ -813,12 +817,15 @@ var game = new $.Machine(Object.seal({
             $('.score', cell)[0].textContent = wdscore;
             if (res.jinx) cell.classList.add('strike');
             else {
+              this.gamestate[playername][0].score += wdscore;
               if (playername == this.ownname) this.score += wdscore;
               $('.score', p)[0].textContent = wdscore + Number($('.score', p)[0].textContent)
             }
             this.gamestate[playername].push(res);
           } else {
-            $('.jinx-words > :last-child > :last-child > .word')[0].textContent = '💀';
+            var death = $('.jinx-words > :last-child > :last-child > .word')[0];
+            death.classList.add('emoji');
+            death.textContent = '💀';
             if (playername == this.ownname) {
               this.eliminated = true;
               $('.pressed').forEach(x => x.classList.remove('pressed'));
@@ -829,7 +836,7 @@ var game = new $.Machine(Object.seal({
         }
       });
       words.forEach(word => this.found.push(this.list.splice(this.list.indexOf(word), 1)[0]));
-      game.emit('returnjinxroundover', Object.values(playerwords).every(x => !x.found))
+      game.emit('returnjinxroundover', Object.values(playerwords).filter(x => x.found).length)
     })
 
 // Wordlist generator
@@ -850,6 +857,6 @@ game.workerJS = `
       onmessage = (e, l) =>
         Array.prototype.isPrototypeOf(l = e.data) && l.join('').match(/^[A-Z]{9}$/) && getWords(l);
       sowpods = text.split(/\\r\\n|\\n/);
-      wait = wait.r(onmessage(wait.e))
+      if (wait) wait = wait.r(onmessage(wait.e))
     })
 `;
