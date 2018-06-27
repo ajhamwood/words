@@ -52,7 +52,13 @@ router.ws('/', (ws, req) => {
     }
 
     else if ('gametype' in msg && kl == 1) {
-      if (msg.gametype.match(/^(uniques|jinx)$/)) {
+      if (msg.gametype == null) {
+        if ((await req.app.db.collection('players').find({ _id: ws.id }).toArray())[0].role == 'host' &&
+          (await req.app.db.collection('rooms').find({ _id: ws.room_id }).toArray())[0].phase == 'ready')
+          req.app.emit('updategame', { ...msg, host: ws });
+        else ws.send(JSON.stringify({error: 'Invalid action'}))
+      }
+      else if (typeof msg.gametype == 'string' && msg.gametype.match(/^(uniques|jinx)$/)) {
         if ((await req.app.db.collection('rooms').find({ _id: ws.room_id }).toArray())[0].phase != 'voting')
           ws.send(JSON.stringify({error: 'Voting ended'}));
         else req.app.emit('updategame', { ...msg, voter: ws });

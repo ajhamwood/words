@@ -18,7 +18,7 @@ module.exports = async function updategame (opts) {
           gametype: { uniques: 0, jinx: 0, empty: 1, time: Date.now(), balance: .5 },
           gamedata: { letters, begintime: null }
         }), r = opts.host.room_id = result.insertedIds[0];
-    await this.db.collection('players').update({ _id: opts.host.id }, { $set: { role: 'host', ready: true, room_id: opts.host.room_id }});
+    await this.db.collection('players').update({ _id: opts.host.id }, { $set: { role: 'host', ready: true, room_id: opts.host.room_id } });
     opts.host.send(JSON.stringify({status: 'Created room'}));
     roomData[r] = { players: new Map([[opts.host, Object.assign(playerData.get(opts.host), {
       role: 'host', voted: null, ready: true, found: null, round: null
@@ -91,6 +91,22 @@ module.exports = async function updategame (opts) {
         players.get(newHost).role = 'host'
       }
     }
+  }
+
+  // Host triggers a new vote for gametype
+  else if ('gametype' in opts && opts.gametype == null && 'host' in opts && kl == 2) {
+    let r = opts.host.room_id.toString(), { players } = roomData[r], empty = players.size, ids = [...players.keys()].map(ws => ws.id);
+    players.forEach((p, ws) => {
+      p.role != 'host' && ws.send(JSON.stringify({update: 'Gametype unset'}));
+      Object.assign(p, { voted: null, found: null, score: null });
+    });
+    roomData[r].phase = 'voting';
+    delete roomData[r].gametype;
+    await this.db.collection('rooms').update({ _id: opts.host.room_id }, {
+      $set: { gametype: { uniques: 0, jinx: 0, empty, time: Date.now(), balance: .5 },
+        gamedata: { letters: roomData[r].letters, begintime: null }, phase: 'voting' }
+    });
+    await this.db.collection('players').update({ _id: { $in: ids } }, { $set: { voted: null, found: null, score: null } }, { multi: 1 })
   }
 
   // Player votes on the gametype in their room
@@ -182,7 +198,7 @@ module.exports = async function updategame (opts) {
     else if (roomData[r].gametype == 'jinx') {
       setTimeout(() => {
         iv = setInterval(async () => {
-          let group = (await this.db.collection('players').find({ _id: { $in: ids }}, { projection: { round: 1, name: 1 } }).toArray())
+          let group = (await this.db.collection('players').find({ _id: { $in: ids } }, { projection: { round: 1, name: 1 } }).toArray())
                 .reduce((a, x) => (x.round == null || ((a[x.round] = a[x.round] || []).push(x)), a), {}), playerwords = {}, pcount = 0,
               eliminated = (group[''] || []).map(res => res._id);
           for (let found in group) {

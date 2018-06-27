@@ -81,20 +81,18 @@
     <div class='timer'></div>
     <div class='interact ready'>
       <div class='board'></div>
-      <div class='actions'>
-        <div class='button start'>START<div class='spinner'></div></div
-        ><div class='button emoji lock hide'></div>
-      </div>
       <div class='input'></div>
       <div class='invalid'></div>
       <div class='finalscore'></div>
       <div class='numwords'></div>
+      <div class='actions'>
+        <div class='button start'>START<div class='spinner'></div></div
+        ><div class='button emoji lock hide'></div
+        ><div class='button exit'><span class='roomname' tabindex='-1'></span>❎</div>
+      </div>
     </div>
     <div class='words'></div>
     <div class='room hide'>
-      <div class='emotes'>
-        <input class='emoji' type='text' pattern='[^]' placeholder='+'>
-      </div>
       <div class='playerlist'></div>
     </div>
     <div class='button newgame'>New Game<div class='spinner'></div></div>
@@ -121,6 +119,16 @@
       ><span class='kick emoji'>&#x274e;</span
     ></div
   ></template>
+  <template id='emotes'>
+    <div class='emotes'>
+      <span class='emote'>😀</span>
+      <div class='bubble'>
+        <div class='wrapper'>
+          <input class='emoji' type='text' pattern='[^]' placeholder='+'>
+        </div>
+      </div>
+    </div>
+  </template>
   <template id='jinx-words'>
     <div class='jinx-words'></div>
   </template>

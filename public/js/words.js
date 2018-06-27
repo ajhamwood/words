@@ -50,8 +50,7 @@ $.addEvents({
         '.board > :nth-last-child(2)': { 'click touchend': function (e) { e.preventDefault(); game.emit('submit') } },
         '.board > :last-child': { 'click touchend': function (e) { e.preventDefault(); game.emit('type') } },
         '.board > *': { 'click touchend': function (e) { e.preventDefault(); navigator.vibrate(10) } }
-      });
-      game.emit('setemoteset')
+      })
     },
     keypress: function (e) {
       e.stopPropagation();
@@ -80,13 +79,7 @@ $.addEvents({
   '.lock': { 'click touchend': function (e) { e.preventDefault();
     if (!this.dataset.disabled) game.emitAsync('setroomstate', !this.classList.contains('locked'))
   } },
-  '.emotes > input': {
-    change: function (e) { if (!this.validity.patternMismatch) this.value = (this.value.match(/^./u) || [''])[0] },
-    keyup: function (e) { if (e.key == 'Enter' && !this.validity.patternMismatch) {
-      game.emit('addemote', this.value);
-      this.value = '';
-    } else this.value = (this.value.match(/^./u) || [''])[0] }
-  },
+  '.exit': { 'click touchend': function (e)  { e.preventDefault(); game.emit('unsetgametype') } },
   '.newgame': { 'click touchend': function (e) { e.preventDefault(); game.emit('newgame') } },
 });
 
@@ -314,7 +307,7 @@ var game = new $.Machine(Object.seal({
       return new Promise(resolve => {
         $('.multi')[0].classList.add('loading');
         $('.room')[0].classList.remove('hide');
-        $('.lock')[0].classList.remove('hide');
+        $('.actions > :not(.start)').forEach(x => x.classList.remove('hide'));
         if ('name' in localStorage) $('.username > input')[0].value = localStorage.name;
         var ws = this.ws = new WebSocket('wss://' + location.host);
         ws.onopen = () => {
@@ -332,7 +325,6 @@ var game = new $.Machine(Object.seal({
               loadPlayers = list => list.forEach(name => {
                 $.load('player', '.playerlist');
                 $('.playerlist > :last-child > .name')[0].textContent = name;
-                if (name == this.ownname) $('.playerlist > :last-child > .kick')[0].remove();
                 $.addEvents({
                   '.emote': {'click touchend': function (e) { e.preventDefault(); game.emit('addemote', this.textContent) }},
                   '.kick': {'click touchend': function (e) { e.preventDefault(); game.emit('kickplayer', this.previousSibling.textContent) }}
@@ -343,7 +335,7 @@ var game = new $.Machine(Object.seal({
               if (data.status == 'Joined room' && kl == 2) {
                 this.playerlist = this.playerlist.concat(data.playerList);
                 if (!this.roomname) game.emit('returnroomname', 'ok');
-                else $('.playercount')[0].textContent = this.playerlist.length
+                else $('.playercount')[0].textContent = this.playerlist.length;
                 loadPlayers(data.playerList)
               }
               else if (data.status == 'Left room' && kl == 2) {
@@ -372,10 +364,7 @@ var game = new $.Machine(Object.seal({
             }
             else if (kl == 1) {
               if (data.status == 'connected') return debug(data.status)
-              if (data.status == 'Username registered') {
-                game.emit('returnusername', 'ok');
-                loadPlayers([this.ownname])
-              }
+              if (data.status == 'Username registered') game.emit('returnusername', 'ok');
               else if (data.status == 'Created room') game.emit('returnroomname', 'ok');
               else if (data.status == 'Vote acknowledged') game.emit('returnvote', 'ok');
               debug(data.status)
@@ -394,6 +383,7 @@ var game = new $.Machine(Object.seal({
             }
             else if (data.update == 'gamedata' && 'letters' in data && kl == 2) this.worker.postMessage(data.letters);
             else if (data.update == 'Room lock state set' && 'lock' in data && kl == 2) game.emit('returnroomlock', 'ok', data.lock);
+            else if (data.update == 'Gametype unset' && kl == 1) game.emit('unsetgametype');
             else if (data.update == 'Player emote' && 'emote' in data && 'player' in data && kl == 3) {
               game.emit('setemote', data.emote, data.player);
               debug('Emote', data.emote, data.player)
@@ -479,12 +469,15 @@ var game = new $.Machine(Object.seal({
         $('.input')[0].textContent = '';
         $('.numwords')[0].textContent = '';
         $('.words > *').forEach(x => x.remove());
-        $('[data-disabled]').forEach(x => delete x.dataset.disabled)
+        $('.words')[0].classList.remove('jinx-mode');
+        $('[data-disabled]').forEach(x => delete x.dataset.disabled);
+        $('.roomname')[0].textContent = ''
       }
     })
 
     // Sets username for players in the same room to see. (Async)
     .on('setusername', function (username) {
+      if ($('.username > .button')[0].classList.contains('loading')) return;
       $('.username > .button')[0].classList.add('loading');
       $('.create-user > .invalid')[0].textContent = '';
       return new Promise(resolve => {
@@ -495,7 +488,8 @@ var game = new $.Machine(Object.seal({
             $('.username')[0].classList.add('hide');
             $('.role')[0].classList.remove('hide');
             $('.role > input')[0].focus();
-            this.playerlist.push(this.ownname = username)
+            this.playerlist.push(this.ownname = username);
+            game.emit('setemoteset')
           } else if (v == 'taken') $('.create-user > .invalid')[0].textContent = '*Username taken';
           $('.username > .button')[0].classList.remove('loading');
           resolve(game.stop('returnusername'))
@@ -506,8 +500,9 @@ var game = new $.Machine(Object.seal({
 
     // Room creation and membership. (Async)
     .on('setroomname', function (roomname, el) {
-      this.role = el.firstChild.textContent == 'Host' ? 'host' : 'guest';
+      if ($('.role .loading').length) return;
       el.classList.add('loading');
+      this.role = el.firstChild.textContent == 'Host' ? 'host' : 'guest';
       $('.create-user > .invalid')[0].textContent = '';
       return (this.role == 'guest' ? Promise.resolve() : new Promise(resolve => {
         game.on('returnletters', resolve);
@@ -532,7 +527,7 @@ var game = new $.Machine(Object.seal({
             $('.gametype')[0].classList.remove('hide');
             $('.desc-create')[0].classList.add('hide');
             $('.desc-multi')[0].classList.remove('hide');
-            this.roomname = roomname
+            $('.roomname')[0].textContent = this.roomname = roomname
           } else if (v == 'notfound') $('.create-user > .invalid')[0].textContent = '*Room not found';
           else if (v == 'taken') $('.create-user > .invalid')[0].textContent = '*Roomname taken';
           else if (v == 'full') $('.create-user > .invalid')[0].textContent = '*Room is full';
@@ -540,7 +535,7 @@ var game = new $.Machine(Object.seal({
           el.classList.remove('loading');
           resolve(game.stop('returnroomname'))
         });
-        this.ws.send(JSON.stringify(Object.assign({role: this.role, roomname}, letters ? {letters} : {})))
+        this.ws.send(JSON.stringify({ role: this.role, roomname, ...(letters ? {letters} : {}) }))
       }))
     })
 
@@ -643,12 +638,31 @@ var game = new $.Machine(Object.seal({
         '🤓', '😈', '🤡', '💀', '👻', '👽', '💩', '😺', '👮', '🕵', '👸', '🎅'
       ]) }
       emoteset = this.emoteset = new Set(emoteset);
-      emoteset.forEach(e => {
-        $.load('emote', '.emotes');
-        $('.emotes > :last-child')[0].textContent = e
+      $.load('player', '.playerlist');
+      let pNode = $('.playerlist > :last-child')[0];
+      $('.emote', pNode)[0].classList.add('hide');
+      $('.name', pNode)[0].textContent = this.ownname;
+      $('.kick', pNode)[0].remove();
+      $.load('emotes', '.playerlist > :last-child');
+      pNode.insertBefore($('.emotes')[0], $('.name', pNode)[0])
+      $.addEvents({
+        '.bubble > .wrapper > input': {
+          change: function (e) { if (!this.validity.patternMismatch) this.value = (this.value.match(/^./u) || [''])[0] },
+          keyup: function (e) { if (e.key == 'Enter' && !this.validity.patternMismatch) {
+            game.emit('addemote', this.value);
+            this.value = '';
+          } else this.value = (this.value.match(/^./u) || [''])[0] }
+        }
       });
-      $('.emotes')[0].appendChild($('.emotes > input')[0]);
-      $.addEvents({'.emotes > .emote': {click: function (e) { e.preventDefault(); game.emit('setemote', this.textContent) }}})
+      emoteset.forEach(char => {
+        $.load('emote', '.playerlist > :last-child .bubble > .wrapper');
+        $('.bubble > .wrapper > :last-child')[0].textContent = char
+      });
+      $('.bubble > .wrapper')[0].appendChild($('.bubble > .wrapper > input')[0]);
+      $.addEvents({ '.bubble > .wrapper > .emote': { click: function (e) { e.preventDefault();
+        $('.emotes > .emote')[0].classList.add('hide');
+        game.emit('setemote', this.textContent)
+      } } })
     })
 
     // Adds a character to the local emote list.
@@ -656,10 +670,14 @@ var game = new $.Machine(Object.seal({
       if (typeof char == 'string' && char.match(/^.$/u) && !this.emoteset.has(char)) {
         this.emoteset.add(char);
         Object.assign(localStorage, { emoteset: JSON.stringify([...this.emoteset]) });
-        $.load('emote', '.emotes');
-        $('.emotes > :last-child')[0].textContent = char;
-        $.addEvents({'.emotes > :last-child': {click: function (e) { e.preventDefault(); game.emit('setemote', this.textContent) }}});
-        $('.emotes')[0].appendChild($('.emotes > input')[0])
+        $.load('emote', '.bubble > .wrapper');
+        $('.bubble > .wrapper > :last-child')[0].textContent = char;
+        $.addEvents({ '.bubble > .wrapper > :last-child': { click: function (e) { e.preventDefault();
+          $('.bubble')[0].classList.add('hide');
+          $('.emotes > .emote')[0].classList.add('hide');
+          game.emit('setemote', this.textContent)
+        } } });
+        $('.bubble > .wrapper')[0].appendChild($('.bubble > .wrapper > input')[0])
       }
     })
 
@@ -668,11 +686,18 @@ var game = new $.Machine(Object.seal({
       if (typeof char == 'string' && char.match(/^.$/u)) {
         let n = $('.playerlist .name').find(x => x.textContent == (player || this.ownname));
         if (n) {
-          let e = n.previousSibling;
+          let e = n.parentNode.firstChild;
           e.textContent = char;
           e.classList.add('flash');
           setTimeout(() => e.classList.remove('flash'), 50);
-          if (player == undefined) this.ws.send(JSON.stringify({emote: char}))
+          if (player == undefined) {
+            e.classList.remove('hide');
+            setTimeout(() => {
+              e.classList.add('hide');
+              $('.emotes > .emote')[0].classList.remove('hide');
+            }, 6000);
+            this.ws.send(JSON.stringify({emote: char}))
+          }
         }
       }
     })
@@ -680,6 +705,15 @@ var game = new $.Machine(Object.seal({
     // Kicks a player from the room.
     .on('kickplayer', function (player) {
       if (this.role == 'host') this.ws.send(JSON.stringify({kick: player}))
+    })
+
+    // Returns to gametype voting screen
+    .on('unsetgametype', function () {
+      document.body.classList.remove('play');
+      $('.words')[0].classList.remove('jinx-mode');
+      $('.votecount').forEach(x => x.textContent = '');
+      this.gametype = null;
+      this.role == 'host' && this.ws.send(JSON.stringify({gametype: null}))
     })
 
     // Starts a multiplayer game. (Async)

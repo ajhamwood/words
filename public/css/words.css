@@ -1,6 +1,7 @@
 @font-face {
   font-family: 'twemoji';
-  src: url("../fonts/Twemoji.ttf") }
+  src: url("../fonts/Twemoji.ttf");
+  font-display: swap }
 .emote, .emoji { font-family: 'twemoji' }
 html, body {
   margin: 0;
@@ -181,8 +182,29 @@ html, body {
   .invalid::after { content: '\200b' }
   :not(.ready) > .actions { display: none }
   .actions > :nth-child(n+2) { margin-left: 1rem }
+  .actions > .button {
+    vertical-align: middle;
+    margin-right: 0 }
   .lock.locked::after { content: '🔒' }
   .lock:not(.locked)::after { content: '🔓' }
+  .exit.button {
+    position: absolute;
+    top: 5px;
+    right: 5px;
+    padding: 0;
+    border-radius: 0;
+    border: 0;
+    background: transparent;
+    margin: 0 }
+    .roomname {
+      display: none;
+      padding: .3rem .8rem;
+      background: #eee;
+      font-size: small;
+      margin-right: 5px;
+      vertical-align: middle }
+    .exit:active > .roomname:not(:empty),
+    .exit:hover > .roomname:not(:empty) { display:inline }
   .finalscore { font-size: xx-large }
 
 .timer {
@@ -190,7 +212,7 @@ html, body {
   border: 1px solid #ddd;
   position: absolute;
   top: 5px;
-  right: 5px;
+  left: 5px;
   padding: .5rem }
 .room {
   flex: 1;
@@ -199,20 +221,12 @@ html, body {
   margin: 1rem;
   text-align: left;
   min-height: 0 }
-  .emotes {
-    flex: 0 4rem;
-    margin-bottom: 1rem;
-    overflow: auto }
-    .emotes > input {
-      width: 1.2rem;
-      text-align: center }
   .playerlist { flex: 1 }
   .words, .playerlist {
     display: flex;
     flex-flow: column wrap;
-    align-content: flex-start;
-    overflow-x: auto }
-    .emote {
+    align-content: flex-start }
+    .emote, .emotes {
       padding: .2rem;
       width: 1.5rem;
       height: 1.5rem;
@@ -221,10 +235,49 @@ html, body {
       cursor: pointer;
       text-align: center }
       .emote::after { content: '\200b' }
-    .playerlist .emote {
+    .playerlist .emotes > .emote {
+      opacity: 1;
+      filter: contrast(.2) grayscale(.8) brightness(1.6) }
+    .emotes {
+      position: relative;
+      width: auto;
+      padding: 0 }
+    .bubble {
+      display: none;
+      position: absolute;
+      top: -1px;
+      right: 2.3rem;
+      width: 11.4rem;
+      height: 8rem;
+      background: #eee;
+      border-radius: .3rem;
+      text-align: left;
+      padding: .3rem }
+      .wrapper {
+        position: absolute;
+        height: inherit;
+        width: inherit;
+        overflow-x: auto }
+      .bubble::after {
+        content: '';
+        position: absolute;
+        top: .6rem;
+        right: -.5rem;
+        border-width: .5rem 0 .5rem .5rem;
+        border-style: solid;
+        border-color: transparent #eee;
+        display: block;
+        width: 0 }
+      .wrapper > input {
+        width: 1.2rem;
+        text-align: center;
+        margin-bottom: .3rem }
+    .emote:hover + .bubble, .emote + .bubble:hover { display: block }
+    .emote.flash + .emotes > .bubble { display: none }
+    .playerlist > * > .emote {
       opacity: 0;
       transition: opacity 1s 5s }
-    .emote.flash {
+    .playerlist > * > .emote.flash {
       opacity: 1;
       transition: none }
     .kick {
@@ -236,6 +289,7 @@ html, body {
   padding-right: 0;
   height: calc(100% - 9em);
   margin: 1em }
+.completed + .words { overflow: auto }
 .words.jinx-mode { flex-flow: row nowrap }
   .words > *, .remaining > * { margin-right: 1em }
   .strike { text-decoration: line-through }
@@ -274,7 +328,9 @@ html, body {
   .button {
     margin: 0 .5rem;
     box-sizing: border-box;
-    font-size: large }
+    font-size: large;
+    padding: .3rem .7rem;
+    border-radius: .3rem }
   .gametype { margin-top: 0 !important }
   .modechooser > * {
     display: flex;
@@ -289,6 +345,17 @@ html, body {
     .create-user input { max-width: none }
     .create-user > :not(.invalid) { flex-flow: row-reverse }
     .consensus { margin: .5rem -.5rem -.5rem }
+    .bubble {
+      bottom: 1.8rem;
+      top: unset;
+      right: unset }
+      .bubble::after {
+        bottom: -.5rem;
+        left: .5rem;
+        top: unset;
+        right: unset;
+        border-width: .5rem .5rem 0;
+        border-color: #eee transparent }
   .solo, .newgame {
     width: calc(100vw - 1em);
     padding: .3em 0 }
@@ -297,17 +364,15 @@ html, body {
     .words {
       height: calc(100vh - 27.2rem - 40px);
       font-size: small }
-    .room { flex-flow: row nowrap }
-      .emotes { margin: 0 1rem 0 0 }
+    .room {
+      flex-flow: row nowrap;
+      margin-top: 0 }
     .button.start { margin: .5rem 0 }
   .newgame {
     margin: 0 .5em .5em;
     position: unset } }
 @media (max-width: 30em) and (max-height: 35em) {
-  .timer {
-    right: unset;
-    left: 5px;
-    font-size: small }
+  .timer { font-size: small }
   .board {
     padding: .5em;
     grid-auto-flow: column;
