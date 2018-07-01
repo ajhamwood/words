@@ -1,6 +1,6 @@
 @font-face {
   font-family: 'twemoji';
-  src: url("../fonts/Twemoji.ttf");
+  src: url("https://cdn.rawgit.com/ingrinder/twemoji-android/master/fonts/Twemoji.ttf");
   font-display: swap }
 .emote, .emoji { font-family: 'twemoji' }
 html, body {
@@ -280,6 +280,7 @@ html, body {
     .playerlist > * > .emote.flash {
       opacity: 1;
       transition: none }
+    .name { margin-left: .3rem }
     .kick {
       cursor: pointer;
       margin-left: .5rem }
@@ -289,7 +290,7 @@ html, body {
   padding-right: 0;
   height: calc(100% - 9em);
   margin: 1em }
-.completed + .words { overflow: auto }
+.completed + .words, .active + .words { overflow: auto }
 .words.jinx-mode { flex-flow: row nowrap }
   .words > *, .remaining > * { margin-right: 1em }
   .strike { text-decoration: line-through }

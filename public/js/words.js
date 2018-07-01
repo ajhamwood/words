@@ -212,14 +212,14 @@ var game = new $.Machine(Object.seal({
     // Attempts to submit a word as 'found'.
     .on('submit', function () {
       if ($('.input.freeze').length) return;
-      var invalid = $('.interact > .invalid')[0];
+      var invalid = $('.interact > .invalid')[0], maybeClear = '';
       if (~this.found.indexOf(this.wordbuffer)) invalid.textContent = 'Already found';
       else if (!~this.list.indexOf(this.wordbuffer)) invalid.textContent = 'Not accepted';
-      else game.emit('found', this.wordbuffer);
+      else game.emit('found', maybeClear = this.wordbuffer);
       this.validletters = this.letters.slice();
       $('.pressed').forEach(x => x.classList.remove('pressed'));
-      this.wordbuffer = '';
-      if (this.gametype != 'jinx') $('.input')[0].textContent = ''
+      $('.input')[0].textContent = this.gametype == 'jinx' ? maybeClear : '';
+      this.wordbuffer = ''
     })
 
     // Accepts a found word from player.
@@ -419,6 +419,7 @@ var game = new $.Machine(Object.seal({
             else if (data.error == 'Room is full') game.emit('returnroomname', 'full');
             else if (data.error == 'Game is in progress') game.emit('returnroomname', 'inprogress');
             else if (data.error == 'Voting ended') game.emit('returnvote', 'ended');
+            else if (data.error == 'Player not found') game.emit('returnkick', 'notfound');
             debug(data.error)
           }
         }
@@ -462,7 +463,7 @@ var game = new $.Machine(Object.seal({
         $('.room')[0].classList.add('hide');
         $('.playerlist > *').forEach(x => x.remove());
         $('.playerlist')[0].classList.remove('host');
-        $('.interact')[0].classList.remove('completed');
+        $('.interact')[0].classList.remove('completed', 'active');
         $('.interact')[0].classList.add('ready');
         $('.board > :nth-last-child(n+3)').forEach(x => x.textContent = null);
         $('.lock')[0].classList.remove('locked');
@@ -580,17 +581,11 @@ var game = new $.Machine(Object.seal({
       return new Promise(resolve => {
         game.on('returngameinit', function (v) {
           if (v == 'ok') {
+            Object.assign(this, { score: 0, found: [], validletters: this.letters.slice(), wordbuffer: '', gamestate: null });
             if (this.role == 'host') $('.actions')[0].classList.remove('hide');
             else if (this.role == 'guest') $('.actions')[0].classList.add('hide');
             $('.selected').forEach(x => x.classList.remove('selected'));
             $('.consensus')[0].classList.remove('active');
-            Object.assign(this, {
-              score: 0,
-              found: [],
-              validletters: this.letters.slice(),
-              wordbuffer: '',
-              gamestate: null
-            });
             $('.interact')[0].classList.remove('completed');
             $('.interact')[0].classList.add('ready');
             $('.newgame')[0].classList.remove('loading');
@@ -694,7 +689,7 @@ var game = new $.Machine(Object.seal({
             e.classList.remove('hide');
             setTimeout(() => {
               e.classList.add('hide');
-              $('.emotes > .emote')[0].classList.remove('hide');
+              $('.emotes > .emote').forEach(x => x.classList.remove('hide'));
             }, 6000);
             this.ws.send(JSON.stringify({emote: char}))
           }
@@ -704,7 +699,22 @@ var game = new $.Machine(Object.seal({
 
     // Kicks a player from the room.
     .on('kickplayer', function (player) {
-      if (this.role == 'host') this.ws.send(JSON.stringify({kick: player}))
+      if (this.role == 'host') {
+        let el = $('.playerlist .name').find(x => x.textContent == player);
+        el.nextSibling.dataset.disabled = true;
+        new Promise(resolve => {
+          game.on('returnkick', function () {
+            el.parentNode.remove()
+            this.playerlist = this.playerlist.filter(x => !~data.playerList.indexOf(player));
+            if (this.waiting) {
+              this.waiting = this.waiting.filter(x => !~data.playerList.indexOf(player));
+              if (!this.waiting.length) delete $('.start')[0].dataset.disabled
+            }
+            game.stop('returnkick')
+          });
+          this.ws.send(JSON.stringify({kick: player}))
+        })
+      }
     })
 
     // Returns to gametype voting screen

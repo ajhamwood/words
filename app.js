@@ -78,14 +78,14 @@ debugSrv('Server environment: %s', process.env.NODE_ENV);
   // Controllers
 
   app.use(require('./controllers/wsController.js'));
-  app.on('updategame', require('./controllers/gameController.js'));
+  require('./controllers/gameController.js')(app);
 
   app.use((req, res) => res.redirect('/'));
 
   // Listen
 
-  return new Promise((resolve, reject, server) => server = app.listen(port, host, err => {
-    if (err) return reject(err);
-    resolve(server)
-  })).then(server => debugSrv('Listening on port %d', server.address().port))
+  let server = app.listen(port, host, err => {
+    if (err) throw err;
+    debugSrv('Listening on port %d', server.address().port)
+  })
 }).catch(err => debug('*err %O', err))

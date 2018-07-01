@@ -1,327 +1,240 @@
 require('dotenv').config();
-const debug = require('debug')('app');
+const debug = require('debug')('app'),
+  { ObjectId } = require('mongodb');
 
-let iv, roomData = {}, playerData = new Map(), consensusSpeed = 30, duration = 180000, roundDuration = 15000;
-module.exports = async function updategame (opts) {
-  let kl = Object.keys(opts).length;
+let iv, consensusSpeed = 30, duration = 180000, roundDuration = 15000;
+module.exports = function (app) {
+  const
+    Rooms = require('../models/roomModel.js')(app),
+    Players = require('../models/playerModel.js')(app);
 
-  // Player submits username
-  if ('username' in opts && 'ws' in opts && kl == 2) {
-    await this.db.collection('players').update({ _id: opts.ws.id }, { $set: { name: opts.username }});
-    opts.ws.send(JSON.stringify({status: 'Username registered'}));
-    playerData.set(opts.ws, { name: opts.username })
-  }
-
-  // Player created new room as host
-  else if ('host' in opts && 'roomname' in opts && 'letters' in opts && kl == 3) {
-    let { letters, roomname } = opts, result = await this.db.collection('rooms').insert({ name: roomname, phase: 'voting', lock: false,
-          gametype: { uniques: 0, jinx: 0, empty: 1, time: Date.now(), balance: .5 },
-          gamedata: { letters, begintime: null }
-        }), r = opts.host.room_id = result.insertedIds[0];
-    await this.db.collection('players').update({ _id: opts.host.id }, { $set: { role: 'host', ready: true, room_id: opts.host.room_id } });
-    opts.host.send(JSON.stringify({status: 'Created room'}));
-    roomData[r] = { players: new Map([[opts.host, Object.assign(playerData.get(opts.host), {
-      role: 'host', voted: null, ready: true, found: null, round: null
-    })]]), phase: 'voting', letters, name: roomname }
-  }
-
-  // Player joins a room
-  else if ('guest' in opts && kl == 1) {
-    await this.db.collection('players').update({ _id: opts.guest.id }, { $set: { role: 'guest', ready: true, room_id: opts.guest.room_id }});
-    let r = opts.guest.room_id.toString(), { players } = roomData[r], player = playerData.get(opts.guest);
-    if (roomData[r].phase == 'voting') await this.db.collection('rooms').update({ _id: opts.guest.room_id }, { $inc: { 'gametype.empty': 1 } });
-    opts.guest.send(JSON.stringify({ status: 'Joined room', playerList: [...players.values()].map(data => data.name) }));
-    if (roomData[r].phase == 'ready') {
-      opts.guest.send(JSON.stringify({ update: 'gamedata', letters: roomData[r].letters }));
-      opts.guest.send(JSON.stringify({ update: 'vote', gametype: roomData[r].gametype }))
-    }
-    players.forEach((_, ws) => ws.send(JSON.stringify({ status: 'Joined room', playerList: [player.name] })));
-    players.set(opts.guest, Object.assign(player, { role: 'guest', voted: null, ready: true }))
-  }
-
-  // Player leaves a room
-  else if ('leave' in opts && kl == 1) {
-    await this.db.collection('players').remove({ _id: opts.leave.id });
-    if (!opts.leave.room_id) return;
-    let r = opts.leave.room_id.toString(), { players } = roomData[r], player = players.get(opts.leave);
-    players.delete(opts.leave);
-    if (players.size == 0) {
-      await this.db.collection('rooms').remove({ _id: opts.leave.room_id });
-      delete roomData[r]
-    } else {
-      players.forEach((_, ws) => ws.send(JSON.stringify({ status: 'Left room', playerList: [player.name] }))); //BUG: errors if simultaneous drop out
-      if (roomData[r].phase == 'voting') {
-        let time = Date.now(), value = (await this.db.collection('rooms').findOneAndUpdate(
-              { _id: opts.leave.room_id, phase: 'voting' },
-              { $inc: (player.voted ? { ['gametype.' + player.voted]: -1 } : { 'gametype.empty': -1 }),
-                $set: { 'gametype.time': time } }
-            )).value.gametype
-            dt = time - value.time, dg = (value.jinx - value.uniques) / 2,
-            bal = value.balance + dt * dg / consensusSpeed / 1e3,
-            jinx = value.jinx, uniques = value.uniques;
-        await this.db.collection('rooms').update({ _id: opts.leave.room_id }, { $set: { 'gametype.balance': bal } });
-        if (player.voted == 'uniques') uniques--;
-        else if (player.voted == 'jinx') jinx--;
-        debug('*vote balance %d %d', bal, dg = (jinx - uniques) / 2);
-        players.forEach((p, ws) => p.voted &&
-          ws.send(JSON.stringify({ update: 'vote', balance: Math.floor(bal * 1e3) / 1e3, delta: dg, time, uniques, jinx })));
-        let timer = dg < 0 ? bal * consensusSpeed * 500 / -dg : dg > 0 ? consensusSpeed * 500 / dg * (1 - bal) : 0;
-        iv && clearTimeout(iv);
-        iv = timer && setTimeout(async () => { //dg, room_id
-          let gametype = dg < 0 ? 'uniques' : 'jinx';
-          Object.assign(roomData[r], { phase: 'ready', gametype });
-          let { letters } = (await this.db.collection('rooms').findOneAndUpdate({ _id: opts.leave.room_id },
-            { $set: { gametype, phase: 'ready', 'gamedata.found': null, ...(dg < 0 ? { 'gamedata.repeats': null } : {}) } },
-            { projection: { 'gamedata.letters': 1 } }
-          )).value.gamedata;
-          debug('*consensus: %s', gametype);
-          players.forEach((_, ws) => {
-            ws.send(JSON.stringify({ update: 'vote', gametype }));
-            ws.send(JSON.stringify({ update: 'gamedata', letters }))
-          })
-        }, timer)
-      }
-      if (player.role == 'host') { // BUG: if last players leave room simultaneously
-        let [readyPlayers, waitingPlayers] = [...players.entries()].reduce((a, x) => (x[1].ready ? a[0].push(x) : a[1].push(x), a), [[], []]);
-        if (readyPlayers.length == 0) return roomData[r].hostless = true;
-        let newHost = readyPlayers[Math.floor(readyPlayers.length * Math.random())][0],
-            waiting = roomData[r].phase == 'ready' ? waitingPlayers.map(x => x[1].name) : [];
-        newHost.send(JSON.stringify({update: 'New host', waiting}));
-        await this.db.collection('players').update({ _id: newHost.id }, { $set: { role: 'host' } });
-        players.get(newHost).role = 'host'
-      }
-    }
-  }
-
-  // Host triggers a new vote for gametype
-  else if ('gametype' in opts && opts.gametype == null && 'host' in opts && kl == 2) {
-    let r = opts.host.room_id.toString(), { players } = roomData[r], empty = players.size, ids = [...players.keys()].map(ws => ws.id);
-    players.forEach((p, ws) => {
-      p.role != 'host' && ws.send(JSON.stringify({update: 'Gametype unset'}));
-      Object.assign(p, { voted: null, found: null, score: null });
-    });
-    roomData[r].phase = 'voting';
-    delete roomData[r].gametype;
-    await this.db.collection('rooms').update({ _id: opts.host.room_id }, {
-      $set: { gametype: { uniques: 0, jinx: 0, empty, time: Date.now(), balance: .5 },
-        gamedata: { letters: roomData[r].letters, begintime: null }, phase: 'voting' }
-    });
-    await this.db.collection('players').update({ _id: { $in: ids } }, { $set: { voted: null, found: null, score: null } }, { multi: 1 })
-  }
-
-  // Player votes on the gametype in their room
-  else if ('gametype' in opts && 'voter' in opts && kl == 2) {
-    let r = opts.voter.room_id.toString(),
-        { gametype } = opts, { players } = roomData[r], player = players.get(opts.voter),
-        { voted } = (await this.db.collection('players').findOneAndUpdate({ _id: opts.voter.id }, { $set: { voted: gametype } })).value,
-        voteChanged = voted == (player.voted = gametype),
-        { uniques, jinx } = { [gametype]: 1 - voteChanged, [(gametype == 'uniques' ? 'jinx': 'uniques')]: (voted == null || voteChanged) - 1 },
-        time = Date.now(), value = (await this.db.collection('rooms').findOneAndUpdate(
-          { _id: opts.voter.room_id },
-          { $inc: { 'gametype.uniques': uniques, 'gametype.jinx': jinx, 'gametype.empty': -(voted == null) },
-            $set: { 'gametype.time': time } }
-        )).value.gametype,
-        dt = time - value.time, dg = (value.jinx - value.uniques) / 2,
-        bal = value.balance + dt * dg / consensusSpeed / 1e3;
-    uniques += value.uniques; jinx += value.jinx;
-    await this.db.collection('rooms').update({ _id: opts.voter.room_id }, { $set: { 'gametype.balance': bal } });
-    dg += !voteChanged * (2 * (opts.gametype == 'jinx') - 1) / (1 + (voted == null));
-    debug('*vote balance %d %d', bal, dg);
-    let timer = dg < 0 ? bal * consensusSpeed * 500 / -dg : dg > 0 ? consensusSpeed * 500 / dg * (1 - bal) : 0;
-    opts.voter.send(JSON.stringify({status: 'Vote acknowledged'}));
-    players.forEach((p, ws) => p.voted && ws.send(JSON.stringify({ update: 'vote', balance: Math.floor(bal * 1e3) / 1e3, delta: dg, time, uniques, jinx })));
+  function consensus (r, balance, delta, time, dt, uniques, jinx) {
+    let room = Rooms.find(r), bal = balance + dt * delta / consensusSpeed / 1e3;
+    Rooms.update(r, { $set: { 'gametype.balance': bal } });
+    debug('*vote balance %d %d in room %s', bal, delta = (jinx - uniques) / 2, r);
+    let timer = delta < 0 ? bal * consensusSpeed * 500 / -delta : delta > 0 ? consensusSpeed * 500 / delta * (1 - bal) : 0;
+    room.players.forEach((p, pws) => p.voted &&
+      pws.send(JSON.stringify({ update: 'vote', balance: Math.floor(bal * 1e3) / 1e3, delta, time, uniques, jinx })));
     iv && clearTimeout(iv);
     iv = timer && setTimeout(async () => {
-      let gametype = dg < 0 ? 'uniques' : 'jinx';
-      Object.assign(roomData[r], { phase: 'ready', gametype });
-      let { letters } = (await this.db.collection('rooms').findOneAndUpdate({ _id: opts.voter.room_id },
-        { $set: { gametype, phase: 'ready', 'gamedata.found': null, ...(dg < 0 ? { 'gamedata.repeats': null } : {}) } },
-        { projection: { 'gamedata.letters': 1 } }
-      )).value.gamedata;
-      debug('*consensus: %s', gametype);
-      players.forEach((_, ws) => {
-        ws.send(JSON.stringify({ update: 'vote', gametype }));
-        ws.send(JSON.stringify({ update: 'gamedata', letters }))
+      let gametype = delta < 0 ? 'uniques' : 'jinx',
+          { letters } = (await Rooms.findOneAndUpdate(r,
+            { $set: { gametype, phase: 'ready', 'gamedata.found': null, ...(delta < 0 ? { 'gamedata.repeats': null } : {}) } },
+            { projection: { 'gamedata.letters': 1 } }
+          )).value.gamedata;
+      debug('*consensus: %s in room %s', gametype, r);
+      room.players.forEach((_, pws) => {
+        pws.send(JSON.stringify({ update: 'vote', gametype }));
+        pws.send(JSON.stringify({ update: 'gamedata', letters }))
       })
     }, timer)
   }
 
-  // Host sets lock state of room
-  else if ('lock' in opts && 'ws' in opts && kl == 2) {
-    await this.db.collection('rooms').update({ _id: opts.ws.room_id }, { $set: { lock: !!opts.lock }});
-    opts.ws.send(JSON.stringify({update: 'Room lock state set', lock: !!opts.lock}))
+  function jinxround (r, found, playerwords, lastPlayer) {
+    let room = Rooms.find(r), roundComplete = () => {
+          Rooms.update(r, { $set: { gamedata: { letters: null, begintime: null, found: null }, phase: 'ready' } });
+          Players.update([...room.players.keys()], { $set: { found: null, round: null, score: null, ready: false } }, { multi: 1 });
+          room.players.forEach((_, pws) => {
+            typeof lastPlayer == 'string' && pws.send(JSON.stringify({ gameevent: 'Round over', playerwords: { [lastPlayer]: { found: '', jinx: false } } }));
+            pws.send(JSON.stringify({ status: 'Game over' }))
+          });
+          debug('*Jinx game over in room %s', r)
+        }, leaders = [...room.players.values()].reduce((a, x) => a[0] && a[0].score > x.score ? a : a[0] && a[0].score == x.score ? [...a, x] : [x], []);
+    Rooms.update(r, { $addToSet: { 'gamedata.found': { $each: found } } });
+    room.players.forEach((_, pws) => pws.send(JSON.stringify({ gameevent: 'Round over', playerwords })));
+    if (typeof lastPlayer == 'string') {
+      clearInterval(iv); clearTimeout(iv);
+      if (leaders.length == 1 && leaders[0].round != null) roundComplete();
+      else iv = setTimeout(roundComplete, roundDuration)
+    } else if (lastPlayer == 0 || lastPlayer == 1 && leaders.length == 1 && leaders[0].round != null) roundComplete(clearInterval(iv))
   }
+
+  // Player submits username
+  app.on('username', function (ws, username) {
+    Players.update(ws, { $set: { name: username } });
+    ws.send(JSON.stringify({status: 'Username registered'}))
+  });
+
+  // Player created new room as host
+  app.on('host', async function (ws, roomname, letters) {
+    let r = ws.room_id = await Rooms.insert({ name: roomname, phase: 'voting', lock: false,
+          gametype: { uniques: 0, jinx: 0, empty: 1, time: Date.now(), balance: .5 },
+          gamedata: { letters, begintime: null }
+        });
+    ws.send(JSON.stringify({status: 'Created room'}));
+    Players.update(ws, { $set: { role: 'host', ready: true, room_id: r } });
+    Rooms.find(r).players = new Map([[ws, Players.find(ws)]]);
+    debug('*created room %s', r)
+  });
+
+  // Player joins a room
+  app.on('guest', function (ws, r, roomname) {
+    let room = Rooms.find(ws.room_id = r), player = Players.find(ws);
+    if (room.phase == 'voting') Rooms.update(r, { $inc: { 'gametype.empty': 1 } });
+    ws.send(JSON.stringify({ status: 'Joined room', playerList: [...room.players.values()].map(data => data.name) }));
+    if (room.phase == 'ready') {
+      ws.send(JSON.stringify({ update: 'gamedata', letters: room.gamedata.letters }));
+      ws.send(JSON.stringify({ update: 'vote', gametype: room.gametype }))
+    }
+    Players.update(ws, { $set: { role: 'guest', ready: true, room_id: r } });
+    room.players.forEach((_, pws) => pws.send(JSON.stringify({ status: 'Joined room', playerList: [player.name] })));
+    room.players.set(ws, player)
+  });
+
+  // Player leaves a room
+  app.on('leave', async function (ws) {
+    let r = ws.room_id, room = Rooms.find(r), player = Players.find(ws);
+    Players.remove(ws);
+    if (!r) return;
+    room.players.delete(ws);
+    if (room.players.size == 0) Rooms.remove(r);
+    else {
+      room.players.forEach((_, pws) => pws.send(JSON.stringify({ status: 'Left room', playerList: [player.name] }))); //BUG: errors if simultaneous drop out
+      if (room.phase == 'voting') {
+        let time = Date.now(), value = (await Rooms.findOneAndUpdate(r,
+              { $inc: (player.voted ? { ['gametype.' + player.voted]: -1 } : { 'gametype.empty': -1 }),
+                $set: { 'gametype.time': time } }
+            )).value.gametype, jinx = value.jinx, uniques = value.uniques, delta = (jinx - uniques) / 2;
+        if (player.voted == 'uniques') uniques--;
+        else if (player.voted == 'jinx') jinx--;
+        consensus(r, value.balance, delta, time, time - value.time, uniques, jinx);
+      }
+      if (player.role == 'host') { // BUG: if last players leave room simultaneously
+        let [readyPlayers, waitingPlayers] = [...room.players.entries()].reduce((a, x) => (x[1].ready ? a[0].push(x) : a[1].push(x), a), [[], []]);
+        if (readyPlayers.length == 0) return;
+        let newHost = readyPlayers[Math.floor(readyPlayers.length * Math.random())][0],
+            waiting = room.phase == 'ready' ? waitingPlayers.map(x => x[1].name) : [];
+        newHost.send(JSON.stringify({ update: 'New host', waiting }));
+        Players.update(newHost, { $set: { role: 'host' } })
+      }
+    }
+  });
+
+  // Player votes on the gametype in their room
+  app.on('votegametype', async function (ws, gametype) {
+    let r = ws.room_id, room = Rooms.find(r),
+        { voted } = (await Players.findOneAndUpdate(ws, { $set: { voted: gametype } })).value,
+        voteChanged = voted == Players.find(ws).voted,
+        { uniques, jinx } = { [gametype]: 1 - voteChanged, [(gametype == 'uniques' ? 'jinx': 'uniques')]: (voted == null || voteChanged) - 1 },
+        time = Date.now(), value = (await Rooms.findOneAndUpdate(r,
+          { $inc: { 'gametype.uniques': uniques, 'gametype.jinx': jinx, 'gametype.empty': -(voted == null) },
+            $set: { 'gametype.time': time } }
+        )).value.gametype, delta = (value.jinx - value.uniques) / 2;
+    uniques += value.uniques; jinx += value.jinx;
+    consensus(r, value.balance, delta, time, time - value.time, uniques, jinx);
+    ws.send(JSON.stringify({status: 'Vote acknowledged'}))
+  });
+
+  // Host triggers a new vote for gametype
+  app.on('unsetgametype', function (ws) {
+    let r = ws.room_id, room = Rooms.find(r), empty = room.players.size;
+    Players.update([...room.players.keys()], { $set: { voted: null, found: null, score: null } }, { multi: 1 });
+    room.players.forEach((p, pws) => {
+      p.role != 'host' && pws.send(JSON.stringify({update: 'Gametype unset'}));
+      if (!p.ready) pws.close()
+    });
+    Rooms.update(ws.room_id, { $set: {
+      gametype: { uniques: 0, jinx: 0, empty, time: Date.now(), balance: .5 },
+      gamedata: { letters: room.gamedata.letters, begintime: null }, phase: 'voting' }
+    })
+  });
+
+  // Host sets lock state of room
+  app.on('lock', function (ws, lock) {
+    Rooms.update(ws.room_id, { $set: { lock } });
+    ws.send(JSON.stringify({update: 'Room lock state set', lock}))
+  });
 
   // Player sets their emote
-  else if ('emote' in opts && 'ws' in opts && kl == 2) {
-    let { name } = (await this.db.collection('players').find({ _id: opts.ws.id }).toArray())[0];
-    roomData[opts.ws.room_id.toString()].players
-      .forEach((_, ws) => ws != opts.ws && ws.send(JSON.stringify({ update: 'Player emote', player: name, emote: opts.emote })))
-  }
+  app.on('emote', function (ws, emote) {
+    Rooms.find(ws.room_id).players.forEach((_, pws) => pws != ws && pws.send(JSON.stringify({ update: 'Player emote', player: Players.find(ws).name, emote })))
+  });
 
   // Host kicks a player out of the room
-  else if ('kick' in opts && 'ws' in opts && kl == 2) {
-    let result = (await this.db.collection('players').findOneAndUpdate({ name: opts.kick }, { $set: { room_id: null } }));
+  app.on('kick', async function (ws, kick) {
+    let result = await Players.findOneAndUpdate({ name: kick }, { $set: { room_id: null } });
     if (!result) return ws.send(JSON.stringify({error: 'Player not found'}));
-    [...roomData[result.value.room_id.toString()].players.keys()].find(ws => ws.id.equals(result.value._id)).close()
-  }
+    [...Rooms.find(result.value.room_id.toString()).players.keys()].find(pws => pws.id.equals(result.value._id)).close()
+  });
 
   // Host requests to start the game
-  else if ('start' in opts && 'ws' in opts && kl == 2) {
-    let begintime = Date.now() + 3500, r = opts.ws.room_id.toString(),
-        { players } = roomData[r], ids = [...players.keys()].map(ws => ws.id);
-
-    if (roomData[r].gametype == 'uniques') {
+  app.on('start', function (ws) {
+    let begintime = Date.now() + 3500, r = ws.room_id, room = Rooms.find(r);
+    if (room.gametype == 'uniques') {
       setTimeout(async () => {
-        await this.db.collection('rooms').update(
-          { _id: opts.ws.room_id },
-          { $set: { gamedata: { letters: [], begintime: null, repeats: [], found: [] }, phase: 'ready' } }
-        ),
-        playerwords = (await this.db.collection('players').find({ _id: { $in: ids } }, { projection: { name: 1, found: 1 } }).toArray())
-          .reduce((a, d) => Object.assign(a, { [d.name]: d.found }), {}); // Db or Model?
-        players.forEach((player, ws) => {
-          ws.send(JSON.stringify({ status: 'Game over', repeats: [...roomData[r].repeats.values()], playerwords }));
-          player.ready = false
-        });
-        await this.db.collection('players').update({ _id: { $in: ids } }, { $set: { found: [], ready: false } }, { multi: 1 });
-        debug('*Uniques game over in room %s', roomData[r].name)
+        let playerwords = [...room.players.values()].reduce((a, d) => Object.assign(a, { [d.name]: [...d.found] }), {});
+        room.players.forEach((_, pws) => pws.send(JSON.stringify({ status: 'Game over', repeats: [...room.gamedata.repeats.values()], playerwords })));
+        Rooms.update(r, { $set: { gamedata: { letters: null, begintime: null, repeats: null, found: null }, phase: 'ready' } });
+        Players.update([...room.players.keys()], { $set: { found: null, ready: false } }, { multi: 1 });
+        debug('*Uniques game over in room %s', r)
       }, duration + 3500 );
-      await this.db.collection('rooms').update(
-        { _id: opts.ws.room_id },
-        { $set: { 'gamedata.begintime': begintime, 'gamedata.found': [], 'gamedata.repeats': [], phase: 'play' }}
-      );
-      await this.db.collection('players').update({ _id: { $in: ids } }, { $set: { found: [] }}, { multi: 1 });
-      Object.assign(roomData[r], { found: new Set(), repeats: new Set(), phase: 'play' });
-      players.forEach(player => player.found = new Set())
+      Rooms.update(r, { $set: { 'gamedata.begintime': begintime, 'gamedata.found': new Set(), 'gamedata.repeats': new Set(), phase: 'play' }})
+      Players.update([...room.players.keys()], { $set: { found: new Set() } }, { multi: 1 });
     }
-
-    else if (roomData[r].gametype == 'jinx') {
+    else if (room.gametype == 'jinx') {
       setTimeout(() => {
         iv = setInterval(async () => {
-          let group = (await this.db.collection('players').find({ _id: { $in: ids } }, { projection: { round: 1, name: 1 } }).toArray())
-                .reduce((a, x) => (x.round == null || ((a[x.round] = a[x.round] || []).push(x)), a), {}), playerwords = {}, pcount = 0,
-              eliminated = (group[''] || []).map(res => res._id);
+          let group = [...room.players.entries()].reduce((a, x) => (x[1].round == null || ((a[x[1].round] = a[x[1].round] || []).push(x)), a), {}),
+              eliminated = [], alive = [], playerwords = {};
           for (let found in group) {
-            if (group[found].length > 1) group[found].forEach(res => playerwords[res.name] = { found, jinx: true });
-            else playerwords[group[found][0].name] = { found, jinx: false }
+            if (found == '') eliminated = eliminated.concat(group[found].map(res => res[0]));
+            else alive = alive.concat(group[found].map(res => res[0]));
+            if (group[found].length > 1) group[found].forEach(res => playerwords[res[1].name] = { found, jinx: true });
+            else playerwords[group[found][0][1].name] = { found, jinx: false }
           }
-          await this.db.collection('players').update({ _id: { $in: eliminated } }, { $set: { round: null } }, { multi: 1 });
-          await this.db.collection('players').update({ _id: { $nin: eliminated }, round: { $ne: null } }, { $set: { round: '' } }, { multi: 1 });
-          await this.db.collection('rooms').update({ _id: opts.ws.room_id }, {
-            $push: { 'gamedata.found': { $each: Object.keys(group).filter(x => x != '') } }
-          });
-          players.forEach((p, ws) => {
-            ws.send(JSON.stringify({ gameevent: 'Round over', playerwords }));
-            p.round = p.round == null || ~eliminated.findIndex(r => r.equals(ws.id)) ? null : (pcount++, '')
-          });
-          Object.keys(group).forEach(x => roomData[r].found.add(x));
-          let leaders = [...players.values()].reduce((a, x) => a[0] && a[0].score > x.score ? a : a[0] && a[0].score == x.score ? [...a, x] : [x], []);
-          if (pcount == 0 || (pcount == 1 && leaders.length == 1 && leaders[0].round != null )) {
-            clearInterval(iv);
-            await this.db.collection('rooms').update({ _id: opts.ws.room_id }, {
-              $set: { gamedata: { letters: [], begintime: null, found: [] }, phase: 'ready' }
-            });
-            await this.db.collection('players').update({ _id: { $in: ids } }, { $set: { found: [], score: 0, ready: false } }, { multi: 1 });
-            players.forEach((player, ws) => {
-              ws.send(JSON.stringify({ status: 'Game over' }));
-              Object.assign(player, { score: 0, ready: false })
-            });
-            roomData[r].phase = 'ready';
-            debug('*Jinx game over in room %s', roomData[r].name)
-          } else if (pcount == 1) roomData[r].atWill = true
+          Players.update(eliminated, { $set: { round: null } }, { multi: 1 });
+          alive.forEach(p => Players.update(p, { $set: { round: '' }, $inc: { score: [0, 0, 0, 1, 1, 2, 3, 5, 8, 11][Players.find(p).round.length] } }));
+          let found = Object.keys(group).filter(x => x != '');
+          jinxround(r, found, playerwords, alive.length)
         }, roundDuration)
       }, 3500);
-      await this.db.collection('rooms').update(
-        { _id: opts.ws.room_id },
-        { $set: { 'gamedata.begintime': begintime, 'gamedata.found': [], phase: 'play' }}
-      );
-      Object.assign(roomData[r], { found: new Set(), phase: 'play' });
-      await this.db.collection('players').update({ _id: { $in: ids } }, { $set: { found: [], round: '' } }, { multi: 1 });
-      players.forEach(player => Object.assign(player, { found: [], round: '', score: 0 }))
+      Rooms.update(r, { $set: { 'gamedata.begintime': begintime, 'gamedata.found': new Set(), phase: 'play' } });
+      Players.update([...room.players.keys()], { $set: { found: [], round: '', score: 0 } }, { multi: 1 });
     }
-
-    players.forEach((_, ws) => ws.send(JSON.stringify({ status: 'Starting game', begintime })))
-  }
+    room.players.forEach((_, pws) => pws.send(JSON.stringify({ status: 'Starting game', begintime })))
+  });
 
   // Player finds a word
-  else if ('found' in opts && 'ws' in opts && kl == 2) {
-    let r = opts.ws.room_id.toString(), { players } = roomData[r], { found } = opts;
-    if (roomData[r].gametype == 'uniques') {
-      if (players.get(opts.ws).found.has(found))
-        opts.ws.send(JSON.stringify({ gameerror: 'Word already found'}));
-      else if (roomData[r].found.has(found)) {
-        let ids = [...players.entries()].filter(x => x[1].found.delete(found))
-          .map(x => (x[0].send(JSON.stringify({ gameevent: 'word', remove: found })), x[0].id));
-        roomData[r].repeats.add(found);
-        opts.ws.send(JSON.stringify({ gameevent: 'word', repeat: found }));
-        await this.db.collection('players').update({ _id: { $in: ids } }, { $pull: { found } }, { multi: 1 });
-        await this.db.collection('rooms').update({ _id: opts.ws.room_id }, { $addToSet: { 'gamedata.repeats': found }})
+  app.on('found', function (ws, found) {
+    let r = ws.room_id, room = Rooms.find(r), player = Players.find(ws);
+    if (room.gametype == 'uniques') {
+      if (player.found.has(found)) ws.send(JSON.stringify({ gameerror: 'Word already found'}));
+      else if (room.gamedata.found.has(found)) {
+        [...room.players.entries()].filter(x => x[1].found.has(found)).forEach(x => x[0].send(JSON.stringify({ gameevent: 'word', remove: found })));
+        ws.send(JSON.stringify({ gameevent: 'word', repeat: found }));
+        Players.update([...room.players.keys()], { $pull: { found } }, { multi: 1 });
+        Rooms.update(r, { $addToSet: { 'gamedata.repeats': found } })
       } else {
-        roomData[r].found.add(found);
-        players.get(opts.ws).found.add(found);
-        opts.ws.send(JSON.stringify({ gameevent: 'word', unique: found }))
-        await this.db.collection('players').update({ _id: opts.ws.id }, { $push: { found } });
-        await this.db.collection('rooms').update({ _id: opts.ws.room_id }, { $push: { 'gamedata.found': found }})
+        ws.send(JSON.stringify({ gameevent: 'word', unique: found }))
+        Players.update(ws, { $addToSet: { found } });
+        Rooms.update(r, { $addToSet: { 'gamedata.found': found } })
       }
-    } else if (roomData[r].gametype == 'jinx') {
-      if (playerData.get(opts.ws).round == null) opts.ws.send(JSON.stringify({ gameerror: 'You have already been eliminated' }));
-      else if (roomData[r].found.has(found)) opts.ws.send(JSON.stringify({ gameerror: 'Word already found' }));
-      else if (playerData.get(opts.ws).round) opts.ws.send(JSON.stringify({ gameerror: 'Word already submitted' }));
-      else {
-        let player = players.get(opts.ws);
-        player.found.push(found);
-        player.score += [0, 0, 0, 1, 1, 2, 3, 5, 8, 11][found.length];
-        if (roomData[r].atWill) {
-          await this.db.collection('players').update({ _id: opts.ws.id }, { $set: { round: '' }, $push: { found }});
-          await this.db.collection('rooms').update({ _id: opts.ws.room_id }, { $push: { 'gamedata.found': found } });
-          players.forEach((_, ws) => ws.send(JSON.stringify({ gameevent: 'Round over', playerwords: { [player.name]: { found, jinx: false } } })));
-          clearInterval(iv); clearTimeout(iv);
-          let roundComplete = async () => {
-                players.forEach((_, ws) => ws.send(JSON.stringify({ gameevent: 'Round over', playerwords: { [player.name]: { found: '', jinx: false } } })));
-                await this.db.collection('rooms').update({ _id: opts.ws.room_id }, {
-                  $set: { gamedata: { letters: [], begintime: null, found: [] }, phase: 'ready' }
-                });
-                await this.db.collection('players').update({ _id: { $in: [...players.keys()].map(ws => ws.id) } }, {
-                  $set: { found: [], score: 0, ready: false }
-                }, { multi: 1 });
-                delete roomData[r].atWill;
-                players.forEach((player, ws) => {
-                  ws.send(JSON.stringify({ status: 'Game over' }));
-                  Object.assign(player, { score: 0, ready: false })
-                });
-                roomData[r].phase = 'ready';
-                debug('*Jinx game over in room %s', roomData[r].name)
-              }, leaders = [...players.values()].reduce((a, x) => a[0] && a[0].score > x.score ? a : a[0] && a[0].score == x.score ? [...a, x] : [x], []);
-          if (leaders.length == 1 && leaders[0].round != null) roundComplete();
-          else iv = setTimeout(roundComplete, roundDuration)
-        } else {
-          await this.db.collection('players').update({ _id: opts.ws.id }, { $set: { round: found }, $push: { found }});
-          player.round = found
-        }
-      }
+    } else if (room.gametype == 'jinx') {
+      if (player.round == null) ws.send(JSON.stringify({ gameerror: 'You have already been eliminated' }));
+      else if (room.gamedata.found.has(found)) ws.send(JSON.stringify({ gameerror: 'Word already found' }));
+      else if (player.round) ws.send(JSON.stringify({ gameerror: 'Word already submitted' }));
+      else if ([...room.players.values()].filter(x => x.round == null).length == room.players.size - 1) {
+        Players.update(ws, { $set: { round: '' }, $push: { found }, $inc: { score: [0, 0, 0, 1, 1, 2, 3, 5, 8, 11][found.length] } });
+        jinxround(r, [found], { [player.name]: { found, jinx: false } }, player.name)
+      } else Players.update(ws, { $set: { round: found }, $push: { found } })
     }
-  }
+  });
 
   // Host provides game letters
-  else if ('letters' in opts && 'ws' in opts && kl == 2) {
-    let r = opts.ws.room_id.toString(), { letters } = opts;
-    await this.db.collection('rooms').update({ _id: opts.ws.room_id }, { $set: { 'gamedata.letters': letters }});
-    Object.assign(roomData[r], { letters });
-    roomData[r].players.forEach((_, ws) => ws != opts.ws && ws.send(JSON.stringify({ update: 'gamedata', letters })))
-  }
+  app.on('letters', function (ws, letters) {
+    let r = ws.room_id;
+    Rooms.update(r, { $set: { 'gamedata.letters': letters } });
+    Rooms.find(r).players.forEach((_, pws) => pws != ws && pws.send(JSON.stringify({ update: 'gamedata', letters })))
+  });
 
   // Player indicates they are ready for the next game
-  else if ('ready' in opts && 'ws' in opts && kl == 2) {
-    await this.db.collection('players').update({ _id: opts.ws.id }, { $set: { ready: true } });
-    playerData.get(opts.ws).ready = true;
-    let r = opts.ws.room_id.toString(), { players } = roomData[r];
-    if (roomData[r].hostless) {
-      delete roomData[r].hostless;
-      let waiting = [...players.entries()].reduce((a, x) => (x[1].ready || a.push(x[1].name), a), []);
-      opts.ws.send(JSON.stringify({update: 'New host', waiting}));
-      await this.db.collection('players').update({ _id: opts.ws.id }, { $set: { role: 'host' } });
-      players.get(opts.ws).role = 'host'
-    } else roomData[opts.ws.room_id.toString()].players
-      .forEach((player, ws) => player.role == 'host' && ws.send(JSON.stringify({ update: 'Player ready', name: playerData.get(opts.ws).name })))
-  }
+  app.on('ready', function (ws) {
+    let r = ws.room_id, room = Rooms.find(r);
+    Players.update(ws, { $set: { ready: true } });
+    if ([...room.players.values()].filter(x => x.role == 'host').length == 0) {
+      ws.send(JSON.stringify({update: 'New host', waiting: [...room.players.entries()].reduce((a, x) => (x[1].ready || a.push(x[1].name), a), [])}));
+      Players.update(ws, { $set: { role: 'host' } })
+    } else room.players.forEach((p, pws) => p.role == 'host' && pws.send(JSON.stringify({ update: 'Player ready', name: Players.find(ws).name })))
+  })
+
 }
